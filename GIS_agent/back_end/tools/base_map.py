@@ -5,11 +5,12 @@ import geopandas as gpd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from data_catalog import get_vector_dataset, get_vector_path
 
-# 🔑 直接写死绝对路径，杜绝路径找不到的问题
-DATA_PATH = r"D:\geoAI\GIS_agent\data\HKDistrict18.shp"
-# 🌟 全新升级：OSM 终极米级高清全球陆地多边形物理路径
-WORLD_SHP_PATH = r"D:\geoAI\GIS_agent\data\land-polygons-complete-4326\land-polygons-complete-4326\land_polygons.shp"
+HK_DISTRICTS = get_vector_dataset("hong_kong_districts")
+OSM_LAND = get_vector_dataset("osm_land_polygons")
+DATA_PATH = get_vector_path("hong_kong_districts")
+WORLD_SHP_PATH = get_vector_path("osm_land_polygons")
 
 
 def init_canvas():
@@ -21,9 +22,9 @@ def init_canvas():
 
     gdf = gpd.read_file(DATA_PATH)
     if gdf.crs is None:
-        gdf = gdf.set_crs("EPSG:4326")
-    elif gdf.crs.to_string() != "EPSG:4326":
-        gdf = gdf.to_crs("EPSG:4326")
+        gdf = gdf.set_crs(HK_DISTRICTS["crs"])
+    elif gdf.crs.to_string() != HK_DISTRICTS["crs"]:
+        gdf = gdf.to_crs(HK_DISTRICTS["crs"])
 
     # 线程安全地创建画布
     fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
@@ -50,8 +51,8 @@ def init_canvas():
             # 🚀 利用 geopandas 底层空间索引，只读取落在香港及周边局部框内的米级多边形，速度提升上千倍
             world_bg = gpd.read_file(WORLD_SHP_PATH, bbox=clip_bbox)
 
-            if world_bg.crs is None or world_bg.crs.to_string() != "EPSG:4326":
-                world_bg = world_bg.to_crs("EPSG:4326")
+            if world_bg.crs is None or world_bg.crs.to_string() != OSM_LAND["crs"]:
+                world_bg = world_bg.to_crs(OSM_LAND["crs"])
 
             # 将 facecolor 调整为优雅的米白色或极淡灰，降低其与香港边界的对比度
             world_bg.plot(ax=ax, facecolor='#f8fafc', edgecolor='#e2e8f0', linewidth=0.2, zorder=0)

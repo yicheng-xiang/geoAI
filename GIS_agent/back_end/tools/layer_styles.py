@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from data_catalog import resolve_csv_path
 
 # 保持西式现代字体首位加载，提供极致清晰的英文字型
 plt.rcParams['font.sans-serif'] = ['Arial', 'Helvetica', 'Microsoft YaHei', 'DejaVu Sans']
@@ -170,7 +171,7 @@ def add_points_layer(state, csv_name="AllTogether.csv", facility_types=None, cma
     ax = state["ax"]
     user_prompt_text = str(state.get("user_prompt", "")).upper()
     
-    csv_path = os.path.join(r"D:\geoAI\GIS_agent\data", csv_name)
+    csv_path = resolve_csv_path(csv_name)
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"Database asset file not found at: {csv_path}")
         

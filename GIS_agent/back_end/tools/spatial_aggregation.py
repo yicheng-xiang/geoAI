@@ -6,14 +6,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from data_catalog import resolve_csv_path
 from layer_styles import refresh_clean_legend
 
 plt.rcParams["font.sans-serif"] = ["Arial", "Helvetica", "Microsoft YaHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
-
-DATA_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data")
-)
 
 CONTINUOUS_CMAPS = {"Greens", "Blues", "Purples", "Reds", "Oranges", "YlOrRd", "viridis"}
 
@@ -125,7 +122,7 @@ def aggregate_points_to_districts(
     ax = state["ax"]
     facility_types = facility_types or []
 
-    csv_path = os.path.join(DATA_DIR, csv_name)
+    csv_path = resolve_csv_path(csv_name)
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"Database asset file not found at: {csv_path}")
 
