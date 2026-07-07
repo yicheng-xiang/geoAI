@@ -1,0 +1,175 @@
+/* 全局重置，消除默认边距，撑满屏幕 */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #f4f1ea; /* 与地图底色呼应的莫兰迪色 */
+}
+
+/* 主容器：左右分栏布局 */
+.app-container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+/* 左侧控制面板 */
+.control-panel {
+  width: 380px;
+  min-width: 380px;
+  background: #ffffff;
+  box-shadow: 4px 0 15px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 10;
+}
+
+.title {
+  font-size: 20px;
+  color: #333333;
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-weight: 600;
+  border-bottom: 2px solid #e9ecef;
+  padding-bottom: 10px;
+}
+
+/* 状态框与日志框 */
+.status-box, .log-box {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 15px;
+  border: 1px solid #e9ecef;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: bold;
+  color: #6c757d;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+
+.thought-text {
+  margin: 0;
+  font-size: 13.5px;
+  color: #0d6efd;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+/* 日志内容区域弹性伸缩 */
+.log-box {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.log-content {
+  flex-grow: 1;
+  overflow-y: auto;
+  font-family: "Fira Code", "Courier New", Courier, monospace;
+  font-size: 12px;
+  color: #212529;
+  line-height: 1.6;
+  padding-right: 5px;
+}
+
+.log-line {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #dee2e6;
+  word-break: break-all;
+}
+
+/* 输入区域 */
+.input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.prompt-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  resize: none;
+  box-sizing: border-box;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.prompt-input:focus {
+  border-color: #0d6efd;
+}
+
+.send-btn {
+  background-color: #0d6efd;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.send-btn:hover { background-color: #0b5ed7; }
+.send-btn.disabled { background-color: #6c757d; cursor: not-allowed; }
+
+/* 右侧 GIS 画布展示区 */
+.map-gallery {
+  flex-grow: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 30px;
+  box-sizing: border-box;
+}
+
+.image-wrapper {
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.map-img-fluid {
+  max-width: 100%;
+  max-height: 85vh;
+  display: block;
+  object-fit: contain;
+}
+
+/* 缺省状态提示 */
+.empty-map-placeholder {
+  text-align: center;
+  color: #adb5bd;
+}
+
+.placeholder-icon {
+  font-size: 64px;
+  margin-bottom: 12px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.6; }
+}
