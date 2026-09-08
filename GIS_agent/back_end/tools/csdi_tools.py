@@ -4,7 +4,7 @@ import hashlib
 import requests
 import geopandas as gpd
 import pandas as pd
-from csdi_sources import catalog, download_dataset, public_datasets
+from csdi_sources import catalog, download_dataset, public_datasets, CsdiServiceUnavailable
 from layer_styles import add_points_layer
 from buffer_analysis import buffer_facility_coverage
 from network_accessibility import network_service_area, collection
@@ -28,7 +28,10 @@ def csdi_download(state, dataset_id, refresh=False):
         return tool_success(f"{dataset['title']}: {dataset['row_count']} records ready as {dataset_id}. "
                             f"{dataset['scope']}", data={'temporary_datasets': public_datasets(state)})
     except Exception as exc:
-        return tool_error('CSDI_NETWORK_ERROR' if isinstance(exc, requests.RequestException) else 'CSDI_DOWNLOAD_FAILED', str(exc))
+        code = ('CSDI_SERVICE_UNAVAILABLE' if isinstance(exc, CsdiServiceUnavailable)
+                else 'CSDI_NETWORK_ERROR' if isinstance(exc, requests.RequestException)
+                else 'CSDI_DOWNLOAD_FAILED')
+        return tool_error(code, str(exc))
 
 
 def _provenance(dataset):

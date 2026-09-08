@@ -295,6 +295,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .leaflet-top.leaflet-left { top: 44px; left: 5px; }
 .leaflet-tile-pane { filter: var(--basemap-filter, none); }
 .basemap-notice { background: #fff7ed; color: #9a3412; padding: 5px 8px; border-radius: 5px; font-size: 10px; margin-bottom: 155px; max-width: 210px; }
+.basemap-notice button { display: block; margin-top: 6px; padding: 4px 6px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; background: white; color: #334155; cursor: pointer; }
 
 .leaflet-control-zoom.leaflet-bar {
   overflow: hidden;
@@ -589,8 +590,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 
 .export-preview-wrapper {
-  padding: 12px;
-  background: #e2e8f0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: transparent;
 }
 
 .map-img-fluid { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }

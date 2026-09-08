@@ -38,6 +38,73 @@ _transport = threading.local()
 _capabilities_cache = {}
 
 
+class CsdiServiceUnavailable(requests.RequestException):
+    """The upstream gateway returned an error page, even with HTTP 200."""
+
+
+def _reject_error_page(content):
+    head = content.lstrip()[:1024].lower()
+    if b'<html' in head or b'<!doctype html' in head:
+        raise CsdiServiceUnavailable(
+            'Official CSDI WFS is temporarily unavailable: the server returned an HTML error page '
+            'instead of spatial data. Please retry later. Existing snapshots are unchanged.')
+
+
+def _parse_xml(content, expected_root):
+    _reject_error_page(content)
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError as exc:
+        raise ValueError('Official WFS returned invalid XML; existing snapshots are unchanged.') from exc
+    name = root.tag.split('}')[-1]
+    if name.lower() == 'html':
+        raise CsdiServiceUnavailable('Official CSDI WFS returned HTML instead of data. Please retry later; existing snapshots are unchanged.')
+    if name in ('ExceptionReport', 'ServiceExceptionReport'):
+        raise ValueError('Official WFS rejected the request with an OGC exception; no dataset was imported.')
+    if name != expected_root:
+        raise ValueError(f'Official WFS did not return {expected_root}; existing snapshots are unchanged.')
+    return root
+
+
+def _hit_count(content):
+    root = _parse_xml(content, 'FeatureCollection')
+    value = root.get('numberMatched')
+    if value is None or not re.fullmatch(r'[0-9]+', value):
+        raise ValueError('Official WFS returned no valid numberMatched count. Download completeness cannot be verified; existing snapshots are unchanged.')
+    count = int(value)
+    if not 0 < count <= MAX_RECORDS:
+        raise ValueError('Unexpected WFS count; existing snapshot has been preserved.')
+    return count
+
+
+def _feature_page(content):
+    _reject_error_page(content)
+    if content.lstrip().startswith(b'<'):
+        _parse_xml(content, 'FeatureCollection')
+        raise ValueError('Official WFS returned XML instead of requested GeoJSON.')
+    try:
+        page = json.loads(content)
+    except (ValueError, UnicodeError) as exc:
+        raise ValueError('Official WFS returned invalid GeoJSON; existing snapshots are unchanged.') from exc
+    if not isinstance(page, dict) or page.get('type') != 'FeatureCollection' \
+            or not isinstance(page.get('features'), list) \
+            or not all(isinstance(feature, dict) for feature in page['features']):
+        raise ValueError('WFS did not return GeoJSON features.')
+    return page
+
+
+def _validate_response(content, params):
+    """Validate before treating a route as healthy or parsing result fields."""
+    operation = params.get('request')
+    if operation == 'GetCapabilities':
+        _parse_xml(content, 'WFS_Capabilities')
+    elif operation == 'GetFeature':
+        if params.get('resultType') == 'hits':
+            _hit_count(content)
+        else:
+            _feature_page(content)
+
+
 def official_catalog():
     """Public metadata only; facility snapshots remain session-owned."""
     with _catalog_lock:
@@ -91,8 +158,8 @@ def resolve_source(dataset_id):
         source['layer'] = cached['layer']
         return source
     try:
-        root = ET.fromstring(_request(url, {'service': 'WFS', 'version': '2.0.0',
-                                          'request': 'GetCapabilities'}))
+        root = _parse_xml(_request(url, {'service': 'WFS', 'version': '2.0.0',
+                                          'request': 'GetCapabilities'}), 'WFS_Capabilities')
         layers = [node.text for node in root.findall('.//{*}FeatureType/{*}Name') if node.text]
     except (requests.ConnectionError, requests.Timeout) as exc:
         raise requests.Timeout('Official WFS connection timed out after retries. This does not mean the dataset is unsupported; retry later. Existing snapshots are unchanged.') from exc
@@ -134,10 +201,11 @@ def _request(url, params):
     for attempt, direct in enumerate((first, not first, first)):
         try:
             result = _request_once(url, params, direct=direct)
+            _validate_response(result, params)
             if url.startswith('https://portal.csdi.gov.hk/'):
                 _transport.preference = (direct, time.monotonic() + 120)
             return result
-        except (requests.ConnectionError, requests.Timeout):
+        except (requests.ConnectionError, requests.Timeout, CsdiServiceUnavailable):
             if attempt == 2:
                 raise
         except requests.HTTPError as exc:
@@ -211,13 +279,10 @@ def download_dataset(state, dataset_id, refresh=False):
     url = service_url(source)
     base = {'service': 'WFS', 'version': '2.0.0', 'request': 'GetFeature', 'typeNames': source['layer']}
     # hits must be XML: this service returns an empty response with GeoJSON hits.
-    hits = ET.fromstring(_request(url, {**base, 'resultType': 'hits'}))
-    total = int(hits.attrib['numberMatched'])
-    if not 0 < total <= MAX_RECORDS:
-        raise ValueError('Unexpected WFS count; existing snapshot has been preserved.')
+    total = _hit_count(_request(url, {**base, 'resultType': 'hits'}))
     features = []
     for start in range(0, total, 1000):
-        page = json.loads(_request(url, {**base, 'outputFormat': 'GeoJSON', 'srsName': 'EPSG:4326',
+        page = _feature_page(_request(url, {**base, 'outputFormat': 'GeoJSON', 'srsName': 'EPSG:4326',
                                          'count': 1000, 'startIndex': start}))
         if page.get('type') != 'FeatureCollection':
             raise ValueError('WFS did not return GeoJSON features.')

@@ -73,7 +73,7 @@ class CsdiRegressionTests(unittest.TestCase):
 
     def test_capabilities_reused_without_redownload(self):
         entry = {'id': 'csdi_auto_cache_test', 'dataset': 'cache_test'}
-        xml = b'<root xmlns="http://www.opengis.net/wfs/2.0"><FeatureType><Name>csdi:test</Name></FeatureType></root>'
+        xml = b'<WFS_Capabilities xmlns="http://www.opengis.net/wfs/2.0"><FeatureType><Name>csdi:test</Name></FeatureType></WFS_Capabilities>'
         with patch.object(sources, '_capabilities_cache', {}), \
                 patch.object(sources, 'official_catalog', return_value=[entry]), \
                 patch.object(sources, '_request', return_value=xml) as fetch:

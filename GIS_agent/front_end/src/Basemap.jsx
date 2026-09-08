@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { SIMPLE_BASEMAP_URL, simplifyBasemap } from './basemapStyle.js';
@@ -7,6 +7,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 
 export default function Basemap({ onReady }) {
   const map = useMap();
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let disposed = false;
     let layer;
@@ -14,9 +15,37 @@ export default function Basemap({ onReady }) {
     let fallback = false;
     const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       crossOrigin: 'anonymous', maxZoom: 19,
-    }).addTo(map);
-    map.getContainer().dataset.basemapKind = 'raster';
-    onReady({ kind: 'raster' });
+    });
+    map.getContainer().dataset.basemapKind = 'loading';
+    onReady({ kind: 'loading' });
+    const showNotice = (message, offerFallback = false) => {
+      notice?.remove();
+      notice = L.control({ position: 'bottomleft' });
+      notice.onAdd = () => {
+        const element = L.DomUtil.create('div', 'basemap-notice');
+        element.setAttribute('role', 'status');
+        element.textContent = message;
+        L.DomEvent.disableClickPropagation(element);
+        if (offerFallback) {
+          const retry = L.DomUtil.create('button', '', element);
+          retry.type = 'button';
+          retry.textContent = 'Retry simplified basemap';
+          retry.onclick = () => setAttempt((value) => value + 1);
+          const button = L.DomUtil.create('button', '', element);
+          button.type = 'button';
+          button.textContent = 'Use detailed OSM basemap';
+          button.onclick = () => {
+            streets.addTo(map);
+            map.getContainer().dataset.basemapKind = 'raster';
+            onReady({ kind: 'raster' });
+            showNotice('Detailed OSM basemap selected.');
+          };
+        }
+        return element;
+      };
+      notice.addTo(map);
+    };
+    showNotice('Loading simplified basemap...');
     const controller = new AbortController();
     const showStreetFallback = (reason = 'The vector basemap did not load within 45 seconds.') => {
       if (disposed || fallback) return;
@@ -24,18 +53,10 @@ export default function Basemap({ onReady }) {
       controller.abort();
       if (layer) map.removeLayer(layer);
       layer = null;
-      if (!map.hasLayer(streets)) streets.addTo(map);
-      map.getContainer().dataset.basemapKind = 'raster';
-      onReady({ kind: 'raster' });
-      notice = L.control({ position: 'bottomleft' });
-      notice.onAdd = () => {
-        const element = L.DomUtil.create('div', 'basemap-notice');
-        element.textContent = 'Simple basemap unavailable — showing OSM streets.';
-        element.title = reason;
-        element.setAttribute('role', 'status');
-        return element;
-      };
-      notice.addTo(map);
+      map.getContainer().dataset.basemapKind = 'error';
+      map.getContainer().dataset.basemapError = reason;
+      onReady({ kind: 'error' });
+      showNotice('Simplified basemap unavailable. Retry, or explicitly choose the detailed basemap.', true);
     };
     const timeout = window.setTimeout(showStreetFallback, 45000);
     const resourceUrl = (url) => import.meta.env.DEV && url.startsWith('https://tiles.openfreemap.org/')
@@ -87,6 +108,7 @@ export default function Basemap({ onReady }) {
             return;
           }
           map.removeLayer(streets);
+          notice?.remove();
           layer.getContainer().style.opacity = '1';
           map.getContainer().dataset.basemapKind = 'vector';
           onReady({ kind: 'vector', capture });
@@ -107,6 +129,6 @@ export default function Basemap({ onReady }) {
       notice?.remove();
       onReady(null);
     };
-  }, [map, onReady]);
+  }, [map, onReady, attempt]);
   return null;
 }

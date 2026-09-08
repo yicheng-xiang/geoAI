@@ -5,6 +5,17 @@ import { createLayerPresentation, resolveMapHeading } from '../src/mapPresentati
 import { simplifyBasemap, resolveBasemapStyle } from '../src/basemapStyle.js';
 import { framingOptions } from '../src/mapFraming.js';
 import { bindRoadInteraction, roadInteractionStyle } from '../src/roadInteraction.js';
+import { exportLeafletMap } from '../src/mapExport.js';
+
+test('export rejects an uninitialized map', async () => {
+  await assert.rejects(exportLeafletMap({}), /not ready/);
+});
+
+test('export cannot silently capture loading or failed basemaps', async () => {
+  for (const kind of ['loading', 'error', undefined]) {
+    await assert.rejects(exportLeafletMap({ map: {}, basemap: { kind } }), /explicitly select/);
+  }
+});
 
 test('cross-dataset driving heading states the target count and outbound direction', () => {
   const heading = resolveMapHeading({}, [{ analysis: { method: 'network_service_area',

@@ -67,7 +67,7 @@ class CsdiTests(unittest.TestCase):
         import csdi_sources as src
         from csdi_tools import csdi_catalog
         entry = {'id': 'csdi_auto_test', 'dataset': 'test'}
-        caps = b'<root xmlns="http://www.opengis.net/wfs/2.0"><FeatureType><Name>a</Name></FeatureType><FeatureType><Name>b</Name></FeatureType></root>'
+        caps = b'<WFS_Capabilities xmlns="http://www.opengis.net/wfs/2.0"><FeatureType><Name>a</Name></FeatureType><FeatureType><Name>b</Name></FeatureType></WFS_Capabilities>'
         with patch.object(src, 'official_catalog', return_value=[entry]), patch.object(src, '_request', return_value=caps):
             with self.assertRaisesRegex(ValueError, 'unambiguous'):
                 src.resolve_source(entry['id'])
