@@ -65,9 +65,7 @@ AZURE_OPENAI_KEY=your-api-key
 
 ### 3. 启动与首次使用
 
-双击项目根目录的 **start_geoai.bat**，打开 [系统页面](http://localhost:5173/)。首次可输入：
-
-> Show all 18 Hong Kong districts, colored by district name using tab20.
+双击项目根目录的 **start_geoai.bat**，打开 [系统页面](http://localhost:5173/)，首次可运行下方第 1 个使用例子。
 
 确认生成地图后，可继续修改标题，或点击 **Export preview → Download PNG** 导出。停止系统使用 **stop_geoai.bat**；修改 `.env` 后需停止并重新启动，重启会清空临时会话数据。
 
@@ -81,9 +79,26 @@ AZURE_OPENAI_KEY=your-api-key
 
 首次联网下载香港路网，缓存到 `.geoai-runtime/networks/`；以后默认复用。
 
-## 使用与分析范围
+## 使用例子
 
-完整命令已按 **基础制图、修改地图、Excel、CSDI、空间分析** 分组，见 [使用指南](docs/user-guide.md#分类使用示例)。
+以下 10 个英文请求可直接复制到聊天框，覆盖不同后端能力；它们基于当前工具实现，不表示每条都已通过真实 AI 验收。除标明连续操作的例子外，建议清空会话后单独运行。
+
+| # | 功能与前置条件 | 可复制的请求 |
+|---|---|---|
+| 1 | 行政区分类制图 | `Show all 18 Hong Kong districts, colored by district name using tab20.` |
+| 2 | 本地设施按区计数 | `Count ambulance depots by district using the built-in dataset and map the counts.` |
+| 3 | 本地设施按区密度 | `Calculate primary school density per square kilometre by district using the built-in dataset.` |
+| 4 | 设施点位与图层叠加；接第 1 例 | `Overlay ambulance depot points from the built-in dataset on the current district map. Keep the district layer.` |
+| 5 | 多轮修改标题与配色；接第 2 例 | `Keep the ambulance depot count analysis, redraw it using Blues, and change the title to "Ambulance Depots by District".` |
+| 6 | Excel 点数据落区统计；先在页面上传 `.xlsx` | `Count all uploaded points by district and create a choropleth.` |
+| 7 | 地名解析与缓冲区查询；需要联网 | `Find primary schools within 2 km of Hong Kong Polytechnic University Block Z using the built-in dataset.` |
+| 8 | 驾驶覆盖；先准备路网 | `Show 10-minute driving coverage FROM Aberdeen Ambulance Depot at 30 km/h using the built-in dataset.` |
+| 9 | CSDI 目录发现、下载与制图；需要联网 | `Search CSDI for badminton courts and show their locations in Hong Kong.` |
+| 10 | CSDI 跨数据集缓冲区查询；需要联网，工具会下载所需数据 | `Using CSDI, find ambulance depots within 500 metres of Tung Cheong Street Sports Centre from the public fitness rooms dataset.` |
+
+坐标查询、地图要素、数据刷新和跨数据集车程等更多例子见 [使用指南](docs/user-guide.md#分类使用示例)。
+
+## 数据与分析范围
 
 - **CSDI**：获取目录 → 后端按关键词筛选 → 选择数据集 → WFS 下载与校验 → 制图。搜索结果不代表可导入；当前通用适配支持单图层、具有可识别英文名称的香港 WGS84 点数据，最多 10,000 条。尚未实现 AI 数据集推荐。
 - **Excel**：支持 `.xlsx` 第一张工作表，要求名称和 WGS84 经纬度，最多 5 MB、10,000 行。[字段与分析说明](docs/user-guide.md#本地与-excel-数据)
