@@ -6,3 +6,6 @@ GIS_agent/back_end/agent_schemas/__pycache__/
 GIS_agent/back_end/tools/__pycache__/
 
 GIS_agent/data/land-polygons-complete-4326/
+
+.geoai-runtime/
+GIS_agent/back_end/.venv/

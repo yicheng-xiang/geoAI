@@ -3,7 +3,9 @@ flask-cors
 openai
 python-dotenv
 geopandas
-matplotlib
 pandas
 numpy
-mapclassify
+openpyxl
+osmnx>=2.0,<3
+networkx>=3.4,<4
+requests>=2.31,<3

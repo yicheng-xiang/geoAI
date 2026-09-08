@@ -1,20 +1,20 @@
-import os
+from pathlib import Path
 
-DATA_ROOT = r"D:\geoAI\GIS_agent\data"
+DATA_ROOT = (Path(__file__).resolve().parents[2] / "data").resolve()
 
 VECTOR_DATASETS = {
     "hong_kong_districts": {
-        "path": os.path.join(DATA_ROOT, "HKDistrict18.shp"),
+        "path": DATA_ROOT / "HKDistrict18.shp",
         "crs": "EPSG:4326",
         "description": "Hong Kong 18-district administrative boundaries.",
         "kind": "polygon",
     },
     "osm_land_polygons": {
-        "path": os.path.join(
-            DATA_ROOT,
-            "land-polygons-complete-4326",
-            "land-polygons-complete-4326",
-            "land_polygons.shp",
+        "path": (
+            DATA_ROOT
+            / "land-polygons-complete-4326"
+            / "land-polygons-complete-4326"
+            / "land_polygons.shp"
         ),
         "crs": "EPSG:4326",
         "description": "High-resolution OSM land polygons for basemap rendering.",
@@ -24,41 +24,39 @@ VECTOR_DATASETS = {
 
 TABULAR_DATASETS = {
     "all_facilities": {
-        "filename": "AllTogether.csv",
-        "path": os.path.join(DATA_ROOT, "AllTogether.csv"),
+        "path": DATA_ROOT / "AllTogether.csv",
+        "crs": "EPSG:4326",
         "description": "Facility point table with latitude, longitude, and facility type.",
         "kind": "csv",
     },
 }
 
 
-def get_vector_dataset(name):
-    if name not in VECTOR_DATASETS:
-        raise KeyError(f"Unknown vector dataset: {name}")
-    return VECTOR_DATASETS[name]
+def _validated_dataset(registry, dataset_id, dataset_kind):
+    if dataset_id not in registry:
+        raise KeyError(f"Unknown registered {dataset_kind} dataset: {dataset_id}")
+
+    dataset = dict(registry[dataset_id])
+    resolved_path = Path(dataset["path"]).resolve()
+    if resolved_path != DATA_ROOT and DATA_ROOT not in resolved_path.parents:
+        raise ValueError(f"Registered dataset escapes DATA_ROOT: {dataset_id}")
+
+    dataset["id"] = dataset_id
+    dataset["path"] = str(resolved_path)
+    return dataset
 
 
-def get_vector_path(name):
-    return get_vector_dataset(name)["path"]
+def get_vector_dataset(dataset_id):
+    return _validated_dataset(VECTOR_DATASETS, dataset_id, "vector")
 
 
-def get_tabular_dataset(name):
-    if name not in TABULAR_DATASETS:
-        raise KeyError(f"Unknown tabular dataset: {name}")
-    return TABULAR_DATASETS[name]
+def get_vector_path(dataset_id):
+    return get_vector_dataset(dataset_id)["path"]
 
 
-def get_tabular_path(name):
-    return get_tabular_dataset(name)["path"]
+def get_tabular_dataset(dataset_id):
+    return _validated_dataset(TABULAR_DATASETS, dataset_id, "tabular")
 
 
-def resolve_csv_path(csv_name):
-    """
-    Resolve a CSV path from either a registered dataset filename or a direct file
-    name under DATA_ROOT. This keeps existing tool signatures stable while moving
-    dataset management into one central registry.
-    """
-    for dataset in TABULAR_DATASETS.values():
-        if dataset["filename"].lower() == csv_name.lower():
-            return dataset["path"]
-    return os.path.join(DATA_ROOT, csv_name)
+def get_tabular_path(dataset_id):
+    return get_tabular_dataset(dataset_id)["path"]
