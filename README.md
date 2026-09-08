@@ -31,14 +31,44 @@ cd D:\geoAI\GIS_agent\front_end
 npm install
 ```
 
-在后端 `.env` 中配置（不要提交真实密钥）：
+### 配置 Azure OpenAI 密钥（首次使用必做）
+
+密钥填写在项目文件夹内的 **`GIS_agent/back_end/.env` 文件**，不是网页聊天框，也不是 Python 代码。以本项目放在 `D:\geoAI` 为例，完整路径为 `D:\geoAI\GIS_agent\back_end\.env`；如果项目放在其他目录，请替换下面命令中的路径。
+
+**1. 准备连接信息。** 从你使用的 Azure OpenAI 资源获取 Endpoint（服务地址）和 API Key（密钥）；如果资源由老师或团队管理，请向资源管理员获取这两项信息和部署名称。Endpoint 和密钥必须属于同一个资源。本项目按 Azure OpenAI 方式连接，不能直接填入普通 OpenAI 平台的 API Key。
+
+**2. 创建并打开配置文件。** 在 PowerShell 中逐行运行：
+
+```powershell
+cd D:\geoAI\GIS_agent\back_end
+# 从模板创建 .env；已有配置时保留原文件，不覆盖。
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+```
+
+GitHub 中提供的是 `.env.example` 模板，需要在自己的电脑上复制成 `.env`。如果前面的安装步骤已经创建了 `.env`，此处会直接打开它。
+
+**3. 填入自己的地址和密钥。** 在打开的记事本中，保留等号左边的变量名，将右边的示例值替换为自己的实际值：
 
 ```env
 AZURE_OPENAI_ENDPOINT=https://your-resource.cognitiveservices.azure.com/
 AZURE_OPENAI_KEY=your-api-key
 ```
 
-当前 `agent.py` 使用部署名 `gpt-5-mini` 和 API 版本 `2024-12-01-preview`，须与 Azure 资源匹配。
+- 第一行：将整个 `https://your-resource.cognitiveservices.azure.com/` 替换为资源提供的实际 Endpoint，不要自行拼接聊天请求路径。
+- 第二行：将 `your-api-key` 替换为完整的实际密钥，不要保留这个占位文字。
+- 一项一行，只复制上述两行内容，不要复制 Markdown 的代码块标记。按 **Ctrl+S** 保存并关闭记事本。
+- 文件名必须是 **`.env`**，不能是 `.env.txt`。如果手动另存为，请选择“所有文件”类型，并检查文件扩展名。
+
+**4. 核对部署名称。** 当前 [agent.py](GIS_agent/back_end/agent.py) 使用部署名 `gpt-5-mini` 和 API 版本 `2024-12-01-preview`。Azure 资源中必须存在对应部署；如果实际部署名称不同，需要将代码中的 `model="gpt-5-mini"` 改为实际部署名称。当前部署名和 API 版本没有通过 `.env` 配置，仅在 `.env` 添加同名配置项不会生效。
+
+**5. 启动或重启后验证。** 完成配置后按下文启动系统。如果系统已经运行，先双击 `stop_geoai.bat`，再双击 `start_geoai.bat`，使后端重新读取配置。重启会清空临时会话和下载快照。打开页面后，发送下文的“行政区分类”示例，检查是否能完成 AI 工具调用并生成地图；仅能打开网页不代表密钥已经验证成功。
+
+如果出现认证失败，请检查 Endpoint 与密钥是否复制完整、属于同一个资源，以及文件是否误存为 `.env.txt`；如果提示找不到部署，请核对部署名称。
+
+`.env` 已被 Git 忽略，**不要上传真实密钥，也不要把密钥贴入聊天或截图**。提交到仓库的 `.env.example` 应始终只保留示例值。
+
+### 启动系统
 
 之后双击根目录 **start_geoai.bat**，自动启动前后端并打开 [前端页面](http://localhost:5173/)。停止使用 **stop_geoai.bat**，日志在 `.geoai-runtime/`。
 
