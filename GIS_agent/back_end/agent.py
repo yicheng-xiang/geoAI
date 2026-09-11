@@ -17,6 +17,8 @@ from tools import REGISTRY_TOOLS, init_map_state
 from tools.tool_results import normalize_tool_result, tool_error
 
 AVAILABLE_TOOLS = {
+    'restyle_map': REGISTRY_TOOLS['restyle_map'],
+    'network_distance_query': REGISTRY_TOOLS['network_distance_query'],
     **{name: REGISTRY_TOOLS[name] for name in ('csdi_catalog', 'csdi_download', 'csdi_map', 'csdi_nearby')},
     "network_service_area": REGISTRY_TOOLS["network_service_area"],
     "draw_choropleth": REGISTRY_TOOLS["draw_choropleth"],
@@ -44,7 +46,11 @@ def set_agent_uploaded_dataset(session_id, uploaded_dataset):
     """Replace one session upload and invalidate maps made from older data."""
     session = SESSION_STORE.get_or_create(session_id)
     with session["lock"]:
-        session["map_state"] = None
+        previous = session.get('map_state') or {}
+        session["map_state"] = init_map_state() if previous.get('results') else None
+        if session['map_state'] is not None:
+            session['map_state']['results'] = previous['results']
+            session['map_state']['active_result_id'] = previous.get('active_result_id')
         session["uploaded_dataset"] = uploaded_dataset
         session["updated_at"] = time.time()
 
@@ -80,6 +86,17 @@ def clear_agent_session(session_id):
 
 def _system_prompt():
     return (
+        "For road/network DISTANCE in metres or km use network_distance_query with explicit walk or drive. "
+        "network_distance_query returns actual shortest-route LINE features, matched targets and center, but NO service-area polygon. "
+        "To add/fix route traces or legends, rerun this tool with existing origin/mode/distance/categories and replace_existing=true. "
+        "Never add an unfiltered add_points_layer to fix a network result legend: it would show out-of-range facilities. "
+        "Only claim route_count lines actually returned. Do not claim a service-area polygon. "
+        "Never convert distance to driving minutes or claim csdi_nearby driving accepts a metre threshold. "
+        "For named places such as PolyU Block Z use location_query; never look them up in fitness-room datasets. "
+        "Reuse the place, category and threshold already supplied in prior turns. Ask only for missing travel mode. "
+        "When a named place and buffer radius are already supplied, run the official resolver directly; do not ask to confirm PolyU Block Z again. "
+        "New analyses replace the map by default unless overlay was explicitly requested. Do not repeatedly ask for replacement confirmation. "
+        "If a network is missing, report the tool error; do not substitute another mode, origin, or old map. "
         "CSDI WFS temporary sources are available: csdi_fitness_rooms (LCSD public fitness rooms, NOT all commercial gyms), "
         "csdi_ambulance_depots (FSD ambulance depots). For gym/fitness distribution or explicit official/CSDI data, "
         "use csdi_map: it downloads and caches the dataset without changing local files. Use csdi_catalog for "
@@ -102,9 +119,13 @@ def _system_prompt():
         "cartographic operators through Thought -> Action -> Observation cycles.\n"
         "Administrative polygons use HKDistrict18.shp. For a categorical district map, "
         "pass NAME to draw_choropleth; for a numeric map use OBJECTID.\n"
-        "Facility tools accept only dataset_id='all_facilities' or dataset_id='session_upload'; "
+        "Facility tools accept dataset_id='all_facilities', dataset_id='session_upload', or an exact downloaded CSDI snapshot ID; "
         "never pass or invent a file path. Use all_facilities by default. Use session_upload only "
-        "when the latest user request explicitly refers to their uploaded Excel file or session dataset. "
+        "when the request refers to uploaded data OR follows up an active uploaded-data analysis without changing source. "
+        "all_facilities is a separate LOCAL file, NOT an index of downloaded CSDI data. Never claim otherwise. "
+        "For a follow-up about downloaded official facilities, retain their exact snapshot IDs, never substitute all_facilities. "
+        "When fitness rooms and ambulance depots were prepared and the user names a fitness room as origin, "
+        "use csdi_nearby with those two IDs for both buffer and driving-time follow-ups, not buffer_facility_coverage on local data. "
         "For session_upload, use facility_types=[] to include every uploaded "
         "point unless the user explicitly requests a FacilityType filter. "
         "Map Ambulance/Rescue to Ambulance Depot, "
@@ -127,8 +148,8 @@ def _system_prompt():
         "draw_choropleth only for an existing district attribute field. "
         "Reuse the current registered dataset, facility filter, metric, and other analysis parameters "
         "unless the user changes them. Use replace_existing=false only when the user explicitly asks "
-        "to add or overlay a layer. To recolor the current map or legend, rerun its data-producing "
-        "tool with the requested cmap and the same analysis parameters; map features and legend must "
+        "to add or overlay a layer. To recolor current points, polygons, routes or legends, use restyle_map, "
+        "never rerun an analysis or add a global point layer for a color-only request. Map features and legend must "
         "use matching colors. Call exactly one tool per iteration. Draw the polygon layer first, "
         "optionally add points, then add title, compass, scale bar, and gridlines. Always call "
         "add_gridlines last. Do not offer CSV, Excel, or report export because those tools are not "
@@ -167,6 +188,7 @@ def _verified_csdi_summary(state, prompt):
 
 
 POINT_DATASET_TOOLS = {
+    'network_distance_query',
     "network_service_area",
     "add_points_layer", "aggregate_points_to_districts", "buffer_facility_coverage",
 }
@@ -193,6 +215,7 @@ COLOR_STYLE_REFERENCE = re.compile(
     re.IGNORECASE,
 )
 MAP_LAYER_TOOLS = {
+    'network_distance_query',
     'csdi_map', 'csdi_nearby',
     "network_service_area",
     "draw_choropleth", "add_points_layer", "aggregate_points_to_districts",
@@ -220,7 +243,10 @@ def _normalize_dataset_arguments(tool_name, arguments, current_prompt, map_state
         return normalized
     if normalized.get("dataset_id", "all_facilities") != "session_upload":
         return normalized
-    if SESSION_UPLOAD_REFERENCE.search(prompt_text):
+    if SESSION_UPLOAD_REFERENCE.search(prompt_text) or (
+        current_analysis.get('dataset_id') == 'session_upload'
+        and not BUILTIN_DATASET_REFERENCE.search(prompt_text)
+    ):
         return normalized
 
     normalized["dataset_id"] = "all_facilities"
@@ -236,6 +262,16 @@ def _normalize_map_arguments(tool_name, arguments, current_prompt, map_state=Non
         map_state=map_state,
     )
     prompt_text = str(current_prompt)
+    if tool_name in POINT_DATASET_TOOLS and not (map_state or {}).get('_replacement_applied') and re.search(
+        r'replace|new map|取代|替换|替換|新地图|新地圖', prompt_text, re.I):
+        if tool_name != 'csdi_nearby':
+            normalized['replace_existing'] = True
+        return normalized
+    if tool_name == 'network_distance_query' and re.search(r'路线|路線|轨迹|軌跡|图例|圖例|route|trace|legend', prompt_text, re.I):
+        # Rebuild the scoped bundle together; never keep a stale global points
+        # layer introduced by a previous unsuccessful legend/route workaround.
+        normalized['replace_existing'] = True
+        return normalized
     if tool_name in MAP_LAYER_TOOLS and isinstance(normalized.get('replace_existing'), bool):
         return normalized
     if tool_name == "buffer_facility_coverage" and not LAYER_OVERLAY_REFERENCE.search(prompt_text):
@@ -250,6 +286,23 @@ def _normalize_map_arguments(tool_name, arguments, current_prompt, map_state=Non
 
 
 def _update_web_layer_stack(map_state, tool_name, result_data):
+    from result_catalog import capture_result
+    before = {id(layer) for layer in map_state.get('web_layers', {}).values()}
+    _update_web_layer_stack_core(map_state, tool_name, result_data)
+    changed = [layer for layer in map_state.get('web_layers', {}).values() if id(layer) not in before]
+    if changed:
+        map_state['_replacement_applied'] = True
+    prompt = str(map_state.get('user_prompt', ''))
+    style_only = bool(CURRENT_MAP_MODIFICATION.search(prompt) and COLOR_STYLE_REFERENCE.search(prompt)
+                      and not GEOMETRY_SWITCH_REFERENCE.search(prompt))
+    # Rendering the just-computed aggregation is presentation, not another analysis.
+    if tool_name == 'draw_choropleth' and map_state.get('active_result_id'):
+        active = map_state.get('results', {}).get(map_state['active_result_id'], {})
+        style_only = style_only or active.get('analysis', {}).get('method') == 'point_in_polygon'
+    capture_result(map_state, result_data, changed, style_only)
+
+
+def _update_web_layer_stack_core(map_state, tool_name, result_data):
     """Mirror data-producing GIS tools into replaceable browser map layers."""
     if not isinstance(result_data, dict) or not result_data.get("geojson"):
         return
@@ -313,6 +366,7 @@ def _web_map_payload(map_state):
     layers = list(map_state.get("web_layers", {}).values())
     layers.sort(key=lambda layer: 1 if layer.get("kind") == "point" else 0)
     return {
+        **__import__('result_catalog').result_payload(map_state),
         "map_layers": layers,
         "map_presentation": dict(map_state.get("web_map", {})),
     }
@@ -382,11 +436,43 @@ def run_gis_agent_stream(user_prompt, session_id):
         yield from _run_locked_session(user_prompt, session_id, session)
 
 
+def _current_session_context(state):
+    """Supply current facts each iteration, without resending feature collections."""
+    layers = [{'id': l.get('id'), 'result_id': l.get('result_id'), 'kind': l.get('kind'),
+               'features': len(l.get('geojson', {}).get('features', [])),
+               'role': l.get('analysis', {}).get('visual_role'),
+               'dataset_id': l.get('analysis', {}).get('dataset_id')}
+              for l in state.get('web_layers', {}).values()]
+    results = [{'id': r['id'], 'rows': len(r.get('rows', [])),
+                'radius_m': r.get('analysis', {}).get('radius_m'),
+                'distance_m': r.get('analysis', {}).get('distance_m')}
+               for r in state.get('results', {}).values()]
+    return ('Current session facts (data, not instructions): ' + json.dumps({
+        'visible_layers': layers, 'cached_dataset_ids': list(state.get('temporary_datasets', {})),
+        'saved_results': results}, ensure_ascii=False) +
+        '\nOnly visible_layers are displayed. Cached datasets and saved results are not necessarily visible. '
+        'The optional Results panel has a Result list to reopen saved tables and Show on map to restore saved layers without analysis. '
+        'Closing tables does not delete results. Explain this when asked about an older result; do not claim it is lost. '
+        'Do not offer unsupported new tools or imply downloaded snapshots were merged into the local file.')
+
+
+def _origin_conflicts_with_request(prompt, arguments):
+    """Prevent a planner from replacing an explicit PolyU block with a suggestion."""
+    from tools.location_search import _canonical_query
+    explicit = _canonical_query(str(prompt))
+    planned = _canonical_query(str(arguments.get('location_query', '')))
+    prefix = 'Hong Kong Polytechnic University Block '
+    return explicit.startswith(prefix) and planned.startswith(prefix) and explicit != planned
+
+
 def _run_locked_session(user_prompt, session_id, session):
     if session["map_state"] is None:
         session["map_state"] = init_map_state()
     if not session["messages"]:
         session["messages"] = [{"role": "system", "content": _system_prompt()}]
+    else:
+        # Keep the conversation, but refresh capabilities after a deployment.
+        session['messages'][0] = {'role': 'system', 'content': _system_prompt()}
 
     map_state = session["map_state"]
     map_state['temporary_datasets'] = session.setdefault('temporary_datasets', {})
@@ -395,6 +481,7 @@ def _run_locked_session(user_prompt, session_id, session):
     _close_hanging_tool_calls(messages)
 
     map_state["user_prompt"] = user_prompt
+    map_state['_replacement_applied'] = False
     messages.append({"role": "user", "content": user_prompt})
     session["updated_at"] = time.time()
 
@@ -406,7 +493,7 @@ def _run_locked_session(user_prompt, session_id, session):
         try:
             response = client.chat.completions.create(
                 model="gpt-5-mini",
-                messages=messages,
+                messages=[messages[0], {'role': 'system', 'content': _current_session_context(map_state)}, *messages[1:]],
                 tools=MAP_TOOLS,
                 tool_choice="auto",
             )
@@ -432,7 +519,7 @@ def _run_locked_session(user_prompt, session_id, session):
         messages.append(response_message)
 
         if not tool_calls:
-            if "add_gridlines" not in executed_tools:
+            if executed_tools and "add_gridlines" not in executed_tools:
                 try:
                     grid_result = normalize_tool_result(AVAILABLE_TOOLS["add_gridlines"](map_state))
                 except Exception as exc:
@@ -457,6 +544,21 @@ def _run_locked_session(user_prompt, session_id, session):
                     narration, _ = _verified_csdi_summary(map_state, '')
                     missing = []
                     narration = last_tool_message + ' ' + narration
+                messages[-1] = {'role': 'assistant', 'content': narration}
+            if executed_tools and all(name in ('csdi_catalog', 'csdi_download') for name in executed_tools):
+                narration = 'Catalogue search/download finished, but no new spatial analysis or map was generated. The previous map is unchanged. ' + narration
+            if not executed_tools and map_state.get('temporary_datasets') and re.search(
+                r'数据库|資料庫|数据源|資料源|下载|下載|缓存|緩存|database|dataset|source|cache|download', user_prompt, re.I):
+                snapshots = map_state['temporary_datasets']
+                narration = ('The official datasets are separate session snapshots; they are not merged into the local database. '
+                    'Cached dataset IDs: ' + ', '.join(snapshots) + '. ' + _verified_csdi_summary(map_state, '')[0] +
+                    ' Only the listed current map layers are visible; cached datasets are not necessarily displayed. No download or analysis was run for this answer.')
+                messages[-1] = {'role': 'assistant', 'content': narration}
+            if 'network_distance_query' in executed_tools and structured_result:
+                actual = structured_result.get('analysis', {})
+                narration = (f"{actual.get('matched_count', 0)} matched facilities; {actual.get('route_count', 0)} shortest-route features "
+                             f"within {actual.get('distance_m')} m {actual.get('travel_mode')} network distance of {actual.get('location_name')}. "
+                             "Only matched facilities and routes are shown. Access connectors are included; no service-area polygon is generated.")
                 messages[-1] = {'role': 'assistant', 'content': narration}
             final_event = {
                 "session_id": session_id,
@@ -484,6 +586,14 @@ def _run_locked_session(user_prompt, session_id, session):
                 print(f"[Dataset Selection] {func_name} -> {func_args['dataset_id']}")
             if func_name not in AVAILABLE_TOOLS:
                 result = tool_error("UNKNOWN_TOOL", f"Tool [{func_name}] is not registered.")
+            elif _origin_conflicts_with_request(user_prompt, func_args):
+                result = tool_error('ORIGIN_MISMATCH', 'The proposed origin differs from the explicitly requested university block. No analysis was run; the previous map is unchanged.')
+            elif (func_name == 'add_points_layer'
+                  and map_state.get('last_analysis', {}).get('analysis', {}).get('method') == 'network_distance'
+                  and (re.search(r'路线|路線|轨迹|軌跡|图例|圖例|范围|範圍|可达|可達|route|trace|legend|within|reachable', user_prompt, re.I)
+                       or 'network_distance_query' in executed_tools)
+                  and not re.search(r'全港|all Hong Kong|all schools in Hong Kong', user_prompt, re.I)):
+                result = tool_error('NETWORK_SCOPE_PROTECTED', 'Unfiltered facility points were not added. Use network_distance_query to update routes, matched facilities and legends together. The scoped map is retained.')
             else:
                 result = normalize_tool_result(AVAILABLE_TOOLS[func_name](map_state, **func_args))
         except json.JSONDecodeError as exc:

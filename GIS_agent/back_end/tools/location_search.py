@@ -1,6 +1,7 @@
 """Resolve Hong Kong place names with the Lands Department Location Search API."""
 
 from copy import deepcopy
+from difflib import SequenceMatcher
 import json
 import re
 import threading
@@ -57,7 +58,7 @@ def _clean_query(value):
 def _canonical_query(query):
     """Normalize the common PolyU 'Core Z' wording to the official 'Block Z' name."""
     polyu_reference = re.search(
-        r"(?:hong\s*kong\s*polytechnic|poly\s*u|polyu|香港理工|香港理工大学|香港理工大學)",
+        r"(?:hong\s*kong\s*polytechnic|poly\s*u|polyu|香港理工|理工大学|理工大學)",
         query,
         re.IGNORECASE,
     )
@@ -65,10 +66,12 @@ def _canonical_query(query):
         return query
 
     block_match = re.search(
-        r"(?:core|block|座)\s*([a-z])\b|\b([a-z])\s*(?:core|block|座)",
+        r"(?:core|block|座)\s*([a-z])\b|(?<![a-z])([a-z])\s*(?:core|block|座)",
         query,
         re.IGNORECASE,
     )
+    if not block_match:
+        block_match = re.search(r'(?<![a-z])([a-z])\s*(?:栋|棟|楼|樓)?$', query, re.IGNORECASE)
     if not block_match:
         return query
     block = next(group for group in block_match.groups() if group).upper()
@@ -175,13 +178,38 @@ def search_hong_kong_location(location_query, timeout_seconds=10):
             f"No Hong Kong location matched '{original_query}'. Try a more specific building name or address.",
         )
 
-    chosen = valid_candidates[0]
+    # Official search returns fuzzy suggestions even for nonexistent places.
+    # A valid coordinate alone is not evidence that it matches the request.
+    def normalize(text):
+        return re.sub(r'[^\w]', '', unicodedata.normalize('NFKC', text).casefold())
+
+    query = normalize(submitted_query)
+    requested_block = re.search(r'\bblock\s+([a-z])\b', submitted_query, re.I)
+    def relevance(candidate):
+        candidate_block = re.search(r'\bblock\s+([a-z])\b', candidate['name_en'], re.I)
+        if requested_block and (not candidate_block or requested_block[1].lower() != candidate_block[1].lower()):
+            return 0
+        names = [normalize(candidate[k]) for k in ('name_en', 'name_zh', 'address_en', 'address_zh') if candidate[k]]
+        return max((1.0 if query == name or (len(query) >= 4 and query in name)
+                    else min(.89, SequenceMatcher(None, query, name).ratio()) for name in names), default=0)
+
+    ranked = sorted(enumerate(valid_candidates, 1), key=lambda pair: relevance(pair[1]), reverse=True)
+    rank, chosen = ranked[0]
+    score = relevance(chosen)
+    ambiguous = len(ranked) > 1 and score >= .72 and relevance(ranked[1][1]) >= score - .02 and (
+        abs(chosen['longitude'] - ranked[1][1]['longitude']) + abs(chosen['latitude'] - ranked[1][1]['latitude']) > .0001)
+    if score < .72 or ambiguous:
+        raise LocationSearchError('LOCATION_CONFIRMATION_REQUIRED',
+            f"Uncertain location match for '{original_query}'. Specify an exact candidate name or WGS84 coordinates; the previous map is unchanged. Candidates: " +
+            '; '.join(c['name'] for _, c in ranked[:5]),
+            data={'query': original_query, 'candidates': [c['name'] for _, c in ranked[:5]]})
     result = {
         **chosen,
         "original_query": original_query,
         "submitted_query": submitted_query,
         "candidate_count": len(valid_candidates),
-        "selection_rank": 1,
+        "selection_rank": rank,
+        "match_score": score,
         "provider": PROVIDER_NAME,
         "provider_url": LOCATION_SEARCH_DOCS,
         "source_crs": HK80_CRS,

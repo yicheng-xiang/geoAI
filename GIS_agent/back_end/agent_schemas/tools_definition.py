@@ -1,5 +1,18 @@
 # 请用以下代码完整覆盖 D:\geoAI\GIS_agent\back_end\agent_schemas\tools_definition.py
 MAP_TOOLS = [
+    {'type': 'function', 'function': {'name': 'restyle_map',
+      'description': 'Change colors of displayed business layers and their legends ONLY. Preserves geometry, title, result tabs and IDs. No downloads or analysis. For blue points use color=blue; for a sequential polygon palette use cmap=Blues. Category colors also synchronize matching route traces. Skips analysis centers and buffer boundaries.',
+      'parameters': {'type': 'object', 'properties': {
+        'color': {'type': 'string'}, 'cmap': {'type': 'string'},
+        'category_colors': {'type': 'object', 'additionalProperties': {'type': 'string'}}}}}},
+    {'type': 'function', 'function': {'name': 'network_distance_query',
+      'description': 'Count facilities within an outbound shortest ROAD DISTANCE of a named Hong Kong place. Resolves place names (including PolyU Block Z) directly. Explicit travel_mode walk or drive; distance_m in metres, NOT minutes. Uses separate prepared networks. Default replaces current map. Never substitute driving time or a straight-line buffer. Target dataset must be local, uploaded or already downloaded CSDI.',
+      'parameters': {'type': 'object', 'properties': {
+        'location_query': {'type': 'string'}, 'travel_mode': {'type': 'string', 'enum': ['walk', 'drive']},
+        'distance_m': {'type': 'number', 'exclusiveMinimum': 0, 'maximum': 50000},
+        'dataset_id': {'type': 'string'}, 'facility_types': {'type': 'array', 'items': {'type': 'string'}},
+        'replace_existing': {'type': 'boolean', 'default': True}},
+        'required': ['location_query', 'travel_mode', 'distance_m', 'dataset_id', 'facility_types']}}},
     {'type': 'function', 'function': {'name': 'csdi_catalog',
         'description': 'Search the live official CSDI catalogue by English or Chinese facility keywords. Returns dataset IDs; WFS point compatibility is checked when downloading. Search before selecting unfamiliar sources.',
         'parameters': {'type': 'object', 'properties': {'query': {'type': 'string'}}}}},
@@ -15,9 +28,10 @@ MAP_TOOLS = [
             'color': {'type': 'string', 'description': 'Optional CSS hex color, e.g. #2563eb. Omit to keep a stable distinct color for this dataset.'},
             'replace_existing': {'type': 'boolean'}}, 'required': ['dataset_id']}}},
     {'type': 'function', 'function': {'name': 'csdi_nearby',
-        'description': 'Count and map targets near a uniquely named origin from another CSDI dataset. Downloads both. Driving is FROM origin to targets, with directed roads and endpoint access costs; not emergency response time.',
+        'description': 'Count and map targets near a uniquely named origin from the same or another CSDI dataset. Downloads both. Excludes the origin itself by default for the same official source. Driving is FROM origin to targets, with directed roads and endpoint access costs; not emergency response time.',
         'parameters': {'type': 'object', 'properties': {
             'origin_name': {'type': 'string'},
+            'exclude_origin': {'type': 'boolean', 'default': True, 'description': 'Exclude the origin feature itself when source and target are the same official dataset. Default true; set false only when explicitly including self. Other colocated facilities are retained.'},
             'origin_dataset_id': {'type': 'string', 'description': 'Exact catalogue dataset ID.'},
             'target_dataset_id': {'type': 'string', 'description': 'Exact catalogue dataset ID.'},
             'mode': {'type': 'string', 'enum': ['buffer', 'driving']},

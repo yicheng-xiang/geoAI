@@ -117,6 +117,26 @@ def session_state():
     })
 
 
+@app.route('/api/results', methods=['GET', 'POST'])
+def session_results():
+    from agent import SESSION_STORE, _web_map_payload
+    from result_catalog import restore_result
+    data = (request.get_json(silent=True) or {}) if request.method == 'POST' else request.args
+    try:
+        if not data.get('session_id'):
+            raise ValueError('session_id is required')
+        session = SESSION_STORE.get_or_create(_resolve_session_id(data))
+        with session['lock']:
+            state = session.get('map_state')
+            if request.method == 'POST':
+                if not state:
+                    raise KeyError('Result not found in this session.')
+                restore_result(state, data.get('result_id'))
+            return jsonify(_web_map_payload(state or {}))
+    except (ValueError, KeyError) as exc:
+        return jsonify({'error': str(exc)}), 400
+
+
 @app.route('/api/chat_and_map_stream', methods=['POST'])
 def chat_and_map_stream():
     """有状态的流式制图网关：基于 SSE 实时增量分发图文状态。"""

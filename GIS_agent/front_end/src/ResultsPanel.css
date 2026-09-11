@@ -1,0 +1,25 @@
+.results-panel { flex: 0 0 auto; min-width: 0; background: #fff; border-top: 1px solid #d6e1ec; display: flex; flex-direction: column; color: #26364c; font-size: 12px; overflow: hidden; overflow-anchor: none; }
+.results-resizer { height: 16px; flex-shrink: 0; cursor: ns-resize; background: #edf2f7; touch-action: none; user-select: none; display: grid; place-items: center; }
+.results-resizer::after { content: ''; width: 40px; height: 3px; border-radius: 3px; background: #94a3b8; }
+.results-resizer:hover, .results-resizer:focus-visible { background: #dbeafe; outline: 2px solid #60a5fa; outline-offset: -2px; }
+.results-header,.result-toolbar { display: flex; align-items: center; gap: 8px; padding: 5px 12px; flex-shrink: 0; }
+.results-header select { max-width: 300px; min-width: 0; flex: 1; margin-left: auto; }
+.results-header { min-height: 42px; }
+.result-toolbar { flex-wrap: wrap; }
+.results-panel button,.results-panel select,.results-panel input { font: inherit; border: 1px solid #cbd8e6; border-radius: 5px; padding: 4px 8px; background: #fff; color: #26364c; }
+.results-panel button { cursor: pointer; } .results-panel button:disabled { opacity: .4; cursor: default; }
+.result-tabs { display: flex; overflow-x: auto; flex-shrink: 0; border-bottom: 1px solid #d6e1ec; }
+.result-tabs > div { display: flex; white-space: nowrap; border-right: 1px solid #d6e1ec; }
+.result-tabs button { border: 0; border-radius: 0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.result-tabs .active button { background: #e9f1ff; color: #1d4ed8; }
+.result-metadata { padding: 4px 12px; max-height: 90px; overflow: auto; flex-shrink: 0; }
+.result-metadata p { overflow-wrap: anywhere; margin: 4px 0; }
+.result-toolbar input { min-width: 80px; max-width: 240px; flex: 1; }
+.result-table-scroll { flex: 1; min-height: 0; overflow: auto; }
+.results-panel table { border-collapse: separate; border-spacing: 0; font-size: 12px; width: 100%; }
+.results-panel th { position: sticky; top: 0; background: #f1f5f9; z-index: 1; text-align: left; white-space: nowrap; }
+.results-panel td { padding: 5px 10px; border-bottom: 1px solid #edf2f7; white-space: nowrap; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+.results-panel tr[aria-selected="true"] td { background: #dbeafe; }
+.results-panel tbody tr:hover td { background: #eff6ff; }
+.result-empty { padding: 12px; color: #64748b; }
+.results-panel [role="status"] { padding: 4px 12px; background: #fff7db; }

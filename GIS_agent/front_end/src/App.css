@@ -254,9 +254,11 @@ button, textarea, input { font: inherit; }
 .send-btn:hover:not(:disabled) { background: #1d4ed8; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 
-.map-workspace { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.map-workspace { min-width: 0; flex: 1; display: flex; flex-direction: column; overflow-y: auto; overflow-anchor: none; }
+.legend-symbol.is-line { height: 3px; border: 0; border-radius: 2px; align-self: center; }
 
 .map-toolbar {
+  flex-shrink: 0;
   min-height: 74px;
   padding: 13px 20px;
   background: #ffffff;
@@ -273,7 +275,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .view-switch .download-map-btn:hover:not(:disabled) { background: #ccfbf1; }
 .view-switch .download-map-btn.is-disabled { opacity: .5; cursor: not-allowed; pointer-events: none; }
 
-.map-gallery { min-height: 0; flex: 1; display: flex; padding: 16px; position: relative; }
+/* Results are an optional section BELOW a stable canvas, never a flex sibling
+   that squeezes Leaflet. Expanding/resizing tables scrolls the workspace. */
+.map-gallery { min-height: 520px; height: calc(100dvh - 120px); flex: 0 0 auto; display: flex; padding: 16px; position: relative; }
 /* Keep Leaflet/WebGL mounted at the same size between tabs. display:none
    would collapse the viewport and trigger resize/reframing on return. */
 .map-view-panel { position: absolute; inset: 16px; display: flex; min-width: 0; min-height: 0; }
@@ -576,8 +580,19 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .map-scale-line::before { left: 0; }
 .map-scale-line::after { right: 0; }
 
-.feature-popup { min-width: 150px; color: #1e293b; line-height: 1.6; }
-.feature-popup strong { display: block; margin-bottom: 4px; }
+.geoai-feature-popup .leaflet-popup-content-wrapper {
+  border: 1px solid #dce6ee; border-radius: 12px;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, .12); padding: 0;
+}
+.geoai-feature-popup .leaflet-popup-content { margin: 15px 22px 14px 16px; max-height: 220px; overflow: auto; }
+.geoai-feature-popup .leaflet-popup-tip { box-shadow: none; width: 10px; height: 10px; }
+.geoai-feature-popup a.leaflet-popup-close-button { top: 5px; right: 5px; color: #64748b; border-radius: 6px; }
+.geoai-feature-popup a.leaflet-popup-close-button:hover { background: #f1f5f9; color: #0f172a; }
+.feature-popup { min-width: 150px; color: #1e293b; line-height: 1.45; font-size: 12px; }
+.feature-popup strong { display: block; margin: 0 10px 10px 0; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
+.feature-popup-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 12px; padding: 5px 0; border-top: 1px solid #f1f5f9; }
+.feature-popup-label { color: #64748b; font-size: 11px; }
+.feature-popup-value { margin-left: auto; font-weight: 500; overflow-wrap: anywhere; max-width: 100%; }
 
 .image-wrapper {
   display: flex;
@@ -608,7 +623,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
     max-height: 260px;
     flex: none;
   }
-  .map-workspace { height: 60vh; min-height: 460px; }
+  .map-workspace { height: auto; min-height: 0; overflow: visible; }
+  .map-gallery { height: 65vh; min-height: 560px; }
   .map-toolbar { align-items: flex-start; }
   .view-switch { flex-wrap: wrap; justify-content: flex-end; }
 }

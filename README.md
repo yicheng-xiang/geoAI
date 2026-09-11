@@ -5,9 +5,11 @@ GeoAI 让用户通过对话完成公共设施数据发现、地图绘制与空�
 ## 核心功能
 
 - **数据接入**：本地设施与行政区数据、Excel 点数据上传、CSDI 官方数据搜索与下载。
-- **空间分析**：分区数量与密度、缓冲区查询、基于有向路网的驾驶可达分析、跨数据集设施查询。
+- **空间分析**：分区数量与密度、直线缓冲区查询、步行/驾车最短路网距离及路线、恒速驾驶时间覆盖、跨数据集设施查询。
 - **交互制图**：十八区设色、设施点位、多图层叠加，以及通过对话修改标题、颜色和地图要素。
-- **结果管理**：地图导出、会话隔离、数据质量检查与来源记录；完整统计和质量报告表格展示仍待完善。
+- **结果管理**：可选多标签结果表格、地图双向联动、搜索/排序/分页、筛选结果 CSV 导出、历史图层恢复，以及会话隔离、数据质量检查与来源记录。
+
+左侧 **GeoAI chat** 支持连续追问，工具日志收纳在 **Operation details**；Excel 与 CSDI 入口位于 **Data sources & uploads**。表格默认收起，不影响独立制图。
 
 ## 技术栈
 
@@ -69,19 +71,21 @@ AZURE_OPENAI_KEY=your-api-key
 
 确认生成地图后，可继续修改标题，或点击 **Export preview → Download PNG** 导出。停止系统使用 **stop_geoai.bat**；修改 `.env` 后需停止并重新启动，重启会清空临时会话数据。
 
-### 4. 可选：准备驾驶分析路网
+### 4. 可选：准备路网
 
-**使用驾驶覆盖或跨数据集车程查询前必须完成**，普通制图和缓冲区分析无需此步骤：
+**使用路网分析前须准备对应模式的缓存**；普通制图和直线缓冲区分析无需此步骤：
 
 ```powershell
-.\GIS_agent\back_end\.venv\Scripts\python.exe .\GIS_agent\back_end\prepare_road_network.py
+.\GIS_agent\back_end\.venv\Scripts\python.exe .\GIS_agent\back_end\prepare_road_network.py --mode drive
+# 仅在需要步行距离分析时执行
+.\GIS_agent\back_end\.venv\Scripts\python.exe .\GIS_agent\back_end\prepare_road_network.py --mode walk
 ```
 
-首次联网下载香港路网，缓存到 `.geoai-runtime/networks/`；以后默认复用。
+首次联网下载香港路网，分别缓存到 `.geoai-runtime/networks/hong_kong_drive.graphml` 和 `hong_kong_walk.graphml`；以后默认复用。步行查询目前较慢。路网距离按米计算，驾驶时间按分钟及情景速度计算，两者不能互换。
 
 ## 使用例子
 
-以下 10 个英文请求可直接复制到聊天框，覆盖不同后端能力。2026-09-08 真实浏览器验收：第 1–8 例通过并导出 PNG，第 9–10 例因 CSDI 响应问题失败，详见[验收记录](docs/map-ui-acceptance-2026-09-08.md)。除标明连续操作的例子外，建议清空会话后单独运行。
+以下英文请求可直接复制到聊天框。除标明连续操作的例子外，建议使用独立会话；清空会话会删除临时数据。数据数量以实际快照为准。
 
 | # | 功能与前置条件 | 可复制的请求 |
 |---|---|---|
@@ -89,20 +93,36 @@ AZURE_OPENAI_KEY=your-api-key
 | 2 | 本地设施按区计数 | `Count ambulance depots by district using the built-in dataset and map the counts.` |
 | 3 | 本地设施按区密度 | `Calculate primary school density per square kilometre by district using the built-in dataset.` |
 | 4 | 设施点位与图层叠加；接第 1 例 | `Overlay ambulance depot points from the built-in dataset on the current district map. Keep the district layer.` |
-| 5 | 多轮修改标题与配色；接第 2 例 | `Keep the ambulance depot count analysis, redraw it using Blues, and change the title to "Ambulance Depots by District".` |
+| 5 | 仅修改展示；接第 2 例 | `Change the palette to Blues and the title to "Ambulance Depots by District". Keep the analysis unchanged.` |
 | 6 | Excel 点数据落区统计；先在页面上传 `.xlsx` | `Count all uploaded points by district and create a choropleth.` |
-| 7 | 地名解析与缓冲区查询；需要联网 | `Find primary schools within 2 km of Hong Kong Polytechnic University Block Z using the built-in dataset.` |
+| 7 | 地名解析与直线缓冲区；需要联网 | `Find primary schools within a straight-line distance of 1 km from Hong Kong Polytechnic University Block Z using the built-in dataset.` |
 | 8 | 驾驶覆盖；先准备路网 | `Show 10-minute driving coverage FROM Aberdeen Ambulance Depot at 30 km/h using the built-in dataset.` |
 | 9 | CSDI 目录发现、下载与制图；需要联网 | `Search CSDI for badminton courts and show their locations in Hong Kong.` |
 | 10 | CSDI 跨数据集缓冲区查询；需要联网，工具会下载所需数据 | `Using CSDI, find ambulance depots within 500 metres of Tung Cheong Street Sports Centre from the public fitness rooms dataset.` |
 
+**连续追问示例**：接第 7 例，逐条发送并等待上一轮结束；步行和驾车路网均须事先准备。
+
+1. `Use walking distance instead of straight-line distance. Keep the same origin and 1 km threshold.`
+2. `Now use driving distance and increase the threshold to 3 km.`
+3. `Include secondary schools too, but only those within the same driving distance. Show the shortest routes to the matched schools.`
+4. `Make primary schools red and secondary schools blue. Keep the analysis unchanged.`
+
+改变距离、模式或类别会重新分析并保存新结果；仅修改标题或通过 `restyle_map` 改色不新增结果。路线是实际返回的最短路几何，不是直线连点。
+
 坐标查询、地图要素、数据刷新和跨数据集车程等更多例子见 [使用指南](docs/user-guide.md#分类使用示例)。
+
+## 可选结果表格
+
+点击 **Show table** 展开。每份分析对应一个标签，可独立搜索、数字排序和分页（每页 50 条）；CSV 导出包含当前筛选后的全部记录。点击表格行或地图业务要素可双向选中、定位并查看弹窗。
+
+切换标签不自动换图。旧结果显示 **Not displayed on map** 时，点击 **Show on map** 可恢复保存的图层，无需重新计算或下载；关闭标签仅隐藏表格，可通过 **Result list** 重开。清空会话或后端重启才会清除这些内存结果。PNG 默认不包含表格和临时选中高亮。
 
 ## 数据与分析范围
 
 - **CSDI**：获取目录 → 后端按关键词筛选 → 选择数据集 → WFS 下载与校验 → 制图。搜索结果不代表可导入；当前通用适配支持单图层、具有可识别英文名称的香港 WGS84 点数据，最多 10,000 条。尚未实现 AI 数据集推荐。
 - **Excel**：支持 `.xlsx` 第一张工作表，要求名称和 WGS84 经纬度，最多 5 MB、10,000 行。[字段与分析说明](docs/user-guide.md#本地与-excel-数据)
-- **能力边界**：分区数量与密度目前支持本地库和 Excel；驾驶分析为恒速、有方向的路网估算，不代表实时交通或救护响应时间。暂不支持人口覆盖、公平性评价和任意数据格式。
+- **能力边界**：分区数量与密度支持注册点数据，包括本地库、Excel 和已下载的兼容 CSDI 快照。路网距离包含设施接入道路的距离；驾驶时间为恒速、有方向的情景估算，不代表实时交通或救护响应时间。暂不支持人口覆盖、公平性评价和任意数据格式。
+- **地点与来源**：地名由官方接口解析，低相关、歧义或楼座不符的候选不能直接作为起点。CSDI 快照与本地库相互独立；“已下载”不等于“正在地图显示”。
 
 ## 常见问题
 
@@ -110,7 +130,9 @@ AZURE_OPENAI_KEY=your-api-key
 |---|---|
 | 页面打不开 | 检查启动窗口和 `.geoai-runtime/` 日志，确认依赖已安装、5000/5173 端口可用；代理应允许 localhost / 127.0.0.1 直连。 |
 | 认证失败或找不到部署 | 核对 `.env` 文件名、Endpoint、密钥和部署名，保存后重启。仅打开网页不能验证密钥。 |
-| 驾驶分析提示缺少路网 | 先执行上面的路网准备命令。 |
+| 步行/驾驶分析提示缺少路网 | 按报错模式执行上面的 `--mode walk` 或 `--mode drive` 命令。 |
+| `GEOCODING_SERVICE_UNAVAILABLE` | 地名接口连接失败，不等于设施为零。稍后重试原请求，或提供确认过的 WGS84 坐标；不需要改端口。当前默认超时 10 秒、无自动重试，成功地点缓存仅保存在内存中。 |
+| `LOCATION_CONFIRMATION_REQUIRED` | 使用提示中的准确官方名称或确认过的坐标；不要把模糊候选直接当成目标地点。失败时保留上次成功地图，不代表新分析完成。 |
 | CSDI 下载超时或不兼容 | 网络超时可重试；多图层、线面数据或不符合字段要求的数据需额外适配。刷新失败保留旧快照。 |
 | 重启后数据消失 | Excel、CSDI 快照和对话保存在会话内存中，重启后需要重新导入；刷新数据后需重新运行分析。 |
 
@@ -128,4 +150,4 @@ stop_geoai.bat      # 停止系统
 
 [开发接口与测试命令](docs/development.md) · [CSDI 验收记录](docs/csdi-stability-report-2026-09-07.md)
 
-2026-09-08 验证：**92 项后端测试、16 项前端测试、lint 和 build 通过**。CSDI 错误页已改为明确的服务不可用提示与有限重试；官方故障仍会阻止新数据下载。自动化测试不调用真实 Azure OpenAI；10 条真实 AI 请求和地图导出结果见[地图验收记录](docs/map-ui-acceptance-2026-09-08.md)。
+**2026-09-11 阶段验收：120 项后端测试、28 项前端测试全部通过，lint 与生产构建通过。** 已使用真实模型和 GIS 工具执行12组60轮连续对话测试，完成主要缺陷修复与针对性复测；网页实测验证了地图替换、配色修改、历史结果恢复及地图—表格联动。本次发布不包含新增测试集及详细验收报告；官方服务仍有偶发波动，PNG 导出尚待补充完整验收。

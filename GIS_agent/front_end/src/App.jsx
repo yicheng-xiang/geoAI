@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import MapView from './MapView.jsx';
+import ChatPanel from './ChatPanel.jsx';
 import CsdiPanel from './CsdiPanel.jsx';
+import ResultsPanel from './ResultsPanel.jsx';
+import useResults from './useResults.js';
 import { createPngObjectUrl, pngFilename } from './mapExport.js';
 import './App.css';
 
@@ -13,6 +16,7 @@ const initialUploadState = {
 };
 
 function App() {
+  const results = useResults();
   const [sessionId] = useState(() => {
     const stored = window.sessionStorage.getItem('geoai_session_id');
     if (stored) return stored;
@@ -41,16 +45,25 @@ function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadState, setUploadState] = useState(initialUploadState);
   const [uploadedDataset, setUploadedDataset] = useState(null);
-  const logEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const mapViewRef = useRef(null);
 
   const uploading = uploadState.phase === 'uploading';
   const busy = loading || uploading || exporting || csdiBusy;
+  const receiveResults = results.receive;
 
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
+    let cancelled = false;
+    fetch(`${API_BASE_URL}/api/results?session_id=${encodeURIComponent(sessionId)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (!payload || cancelled) return;
+        receiveResults(payload);
+        if (payload.map_layers?.length) setMapLayers(payload.map_layers);
+        if (payload.map_presentation) setMapPresentation(payload.map_presentation);
+      }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [sessionId, receiveResults]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +94,7 @@ function App() {
   }, [exportDownloadUrl]);
 
   const resetClientResults = () => {
+    results.dispatch({ type: 'reset' });
     setLogs([]);
     setGeojson(null);
     setMapLayers([]);
@@ -210,6 +224,7 @@ function App() {
   };
 
   const applyStreamResult = (stepResult) => {
+    results.receive(stepResult);
     if (stepResult.thought) setThought(stepResult.thought);
     if (stepResult.log) setLogs((current) => [...current, stepResult.log]);
     if (stepResult.warning) {
@@ -217,6 +232,7 @@ function App() {
     }
     if (Array.isArray(stepResult.map_layers)) {
       setMapLayers(stepResult.map_layers);
+      setResultVersion((current) => current + 1);
       setExportPreview(null);
       setExportDownloadUrl(null);
       setViewMode('interactive');
@@ -250,6 +266,7 @@ function App() {
     if (!submittedPrompt || busy) return;
 
     setLoading(true);
+    setPrompt('');
     setLogs((current) => [...current, `User: ${submittedPrompt}`, '----------------------------------------']);
     setThought('The agent is interpreting the spatial task and selecting GIS tools...');
 
@@ -299,13 +316,6 @@ function App() {
     }
   };
 
-  const handleKeyDown = (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      handleSendPrompt();
-    }
-  };
-
   const handleExportPreview = async () => {
     if (viewMode === 'export' && exportPreview) return;
     if (!mapViewRef.current || exporting) return;
@@ -343,25 +353,15 @@ function App() {
       <aside className="control-panel">
         <header className="panel-header">
           <h1 className="title">GeoAI Spatial Analysis Workbench</h1>
-          <span className={`connection-badge ${busy ? 'is-running' : ''}`}>
+          <span title={thought} className={`connection-badge ${busy ? 'is-running' : ''}`}>
             {uploading ? 'Uploading' : loading ? 'Running' : 'Ready'}
           </span>
         </header>
 
-        <section className="status-box" aria-live="polite">
-          <h2 className="section-title">Agent status</h2>
-          <p className="thought-text">{thought}</p>
-        </section>
-
-        <section className="log-box">
-          <h2 className="section-title">Spatial operation log</h2>
-          <div className="control-log-content">
-            {logs.length === 0 && <p className="empty-log">Execution details will appear here.</p>}
-            {logs.map((log, index) => <div key={`${index}-${log}`} className="log-line">{log}</div>)}
-            <div ref={logEndRef} />
-          </div>
-        </section>
-
+        <ChatPanel logs={logs} prompt={prompt} setPrompt={setPrompt} loading={loading} busy={busy}
+          onSend={handleSendPrompt} onClear={handleClearBoard} />
+        <details className="data-drawer">
+          <summary>Data sources & uploads</summary>
         <CsdiPanel sessionId={sessionId} revision={csdiRevision} busy={busy}
           onBusy={setCsdiBusy} onPrompt={setPrompt} />
         <section className="upload-box" aria-labelledby="upload-title">
@@ -430,25 +430,7 @@ function App() {
           )}
         </section>
 
-        <div className="input-area">
-          <label className="input-label" htmlFor="geo-prompt">Natural-language GIS request</label>
-          <textarea
-            id="geo-prompt"
-            className="prompt-input"
-            rows="3"
-            placeholder="Example: Find primary schools within 2 km of Hong Kong Polytechnic University Block Z."
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={busy}
-          />
-          <div className="btn-group">
-            <button className="clear-btn" onClick={handleClearBoard} disabled={busy}>Clear session</button>
-            <button className="send-btn" onClick={handleSendPrompt} disabled={busy || !prompt.trim()}>
-              {loading ? 'Processing...' : 'Run request'}
-            </button>
-          </div>
-        </div>
+        </details>
       </aside>
 
       <section className="map-workspace" aria-label="Map workspace">
@@ -494,6 +476,8 @@ function App() {
               analysis={analysis}
               mapPresentation={mapPresentation}
               resultVersion={resultVersion}
+              selection={results.state.selection}
+              onFeatureClick={results.onFeatureClick}
             />
           </div>
           {exportPreview && (
@@ -508,6 +492,17 @@ function App() {
             </div>
           )}
         </div>
+        <ResultsPanel controller={results} layers={mapLayers} busy={busy}
+          onRestore={async (id) => {
+            const response = await fetch(`${API_BASE_URL}/api/results`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ session_id: sessionId, result_id: id }),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error || 'Could not restore result.');
+            applyStreamResult(payload);
+            setResultVersion((v) => v + 1);
+          }} />
       </section>
     </main>
   );

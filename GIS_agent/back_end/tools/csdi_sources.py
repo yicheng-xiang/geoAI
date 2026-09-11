@@ -178,14 +178,28 @@ def service_url(source):
     return f"https://portal.csdi.gov.hk/server/services/common/{source['dataset']}/MapServer/WFSServer"
 
 
+def _search_text(value):
+    text = str(value).casefold()
+    for alias in ('消防站', '消防局'):
+        text = text.replace(alias, ' fire station ')
+    for alias in ('图书馆', '圖書館'):
+        text = text.replace(alias, ' library ')
+    # Explicit inflections avoid unsafe stemming of arbitrary dataset names.
+    for plural, singular in [('libraries', 'library'), ('stations', 'station'),
+                             ('courts', 'court'), ('schools', 'school'),
+                             ('hospitals', 'hospital'), ('depots', 'depot')]:
+        text = re.sub(r'\b' + plural + r'\b', singular, text)
+    return text
+
+
 def catalog(query=''):
-    terms = str(query).lower().split()
+    terms = _search_text(query).split()
     entries = [{'id': key, **value} for key, value in SOURCES.items()]
     if terms:
         known = {x['dataset'] for x in entries}
         entries += [x for x in official_catalog() if x['dataset'] not in known]
     return [value for value in entries
-            if all(term in (value['title'] + ' ' + value['keywords']).lower() for term in terms)]
+            if all(term in _search_text(value['title'] + ' ' + value['keywords']) for term in terms)]
 
 
 def public_datasets(state):
@@ -255,8 +269,9 @@ def normalize_features(features, source):
             lon, lat = map(float, coordinates[:2])
             if not (math.isfinite(lon) and math.isfinite(lat) and 113.7 <= lon <= 114.6 and 22 <= lat <= 22.7):
                 raise ValueError('Invalid Hong Kong WGS84 point')
-            name = next((normalized[k] for k in ['name_eng', 'name_en', 'nameen', 'name_e', 'ename', 'name']
-                         if normalized.get(k)), None)
+            name = next((normalized[k].strip() for k in
+                         ['name_eng', 'name_en', 'nameen', 'name_e', 'ename', 'name', 'facility_name']
+                         if isinstance(normalized.get(k), str) and normalized[k].strip()), None)
             if not name:
                 raise ValueError('Missing supported English name field')
             identity = str(props.get('GmlID') or feature.get('id') or props.get('OBJECTID') or '')

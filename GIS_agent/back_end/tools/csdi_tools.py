@@ -69,9 +69,11 @@ def csdi_map(state, dataset_id, replace_existing=True, color=None):
 
 def csdi_nearby(state, origin_name, origin_dataset_id='csdi_fitness_rooms',
                 target_dataset_id='csdi_ambulance_depots', mode='buffer', radius_m=500,
-                time_minutes=5, speed_kmh=30):
+                time_minutes=5, speed_kmh=30, exclude_origin=True):
     """Named origin must resolve uniquely; no guessed or averaged coordinates."""
     try:
+        if not isinstance(exclude_origin, bool):
+            raise ValueError('exclude_origin must be a boolean.')
         radius, minutes, speed = float(radius_m), float(time_minutes), float(speed_kmh)
         if mode not in ('buffer', 'driving') or not all(map(math.isfinite, [radius, minutes, speed])):
             raise ValueError('Choose buffer or driving and finite numeric parameters.')
@@ -97,14 +99,19 @@ def csdi_nearby(state, origin_name, origin_dataset_id='csdi_fitness_rooms',
             return tool_error('AMBIGUOUS_ORIGIN' if len(chosen) else 'ORIGIN_NOT_FOUND',
                               f'Please specify one facility. Candidates: {candidates}')
         row = chosen.iloc[0]
+        same_source = source['source_dataset_id'] == target['source_dataset_id']
+        excluded_ids = [row.source_feature_id] if exclude_origin and same_source else []
+        targets = target['dataframe']
+        targets = targets.loc[~targets.source_feature_id.isin(excluded_ids)].copy()
+        excluded_count = len(target['dataframe']) - len(targets)
         sources = [_provenance(source), _provenance(target)]
         if mode == 'buffer':
             result = buffer_facility_coverage(state, latitude=row.Latitude, longitude=row.Longitude,
-                radius_m=radius, dataset_id=target_dataset_id, facility_types=[target['category']], location_name=row.NAME)
+                radius_m=radius, dataset_id=target_dataset_id, facility_types=[target['category']],
+                location_name=row.NAME, exclude_feature_ids=excluded_ids)
         else:
             graph, _ = load_network()
             origin_points = gpd.GeoSeries(gpd.points_from_xy(chosen.Longitude, chosen.Latitude), crs=4326).to_crs(2326)
-            targets = target['dataframe']
             target_points = gpd.GeoSeries(gpd.points_from_xy(targets.Longitude, targets.Latitude), crs=4326).to_crs(2326)
             origin_quality, reports = target_travel_times(graph, origin_points.iloc[0], list(target_points), minutes, speed)
             # Reuse the existing road/corridor map pipeline without replacing any session dataset.
@@ -120,6 +127,7 @@ def csdi_nearby(state, origin_name, origin_dataset_id='csdi_fitness_rooms',
                 statistics.append({'name': facility.NAME, 'source_feature_id': facility.source_feature_id, **report})
                 if report['status'] == 'within_time':
                     matched_rows.append({'NAME': facility.NAME, 'FACILITY_TYPE': target['category'],
+                                         'source_feature_id': facility.source_feature_id,
                                          **report, 'geometry': point})
             matched_json = collection(matched_rows) if matched_rows else {'type': 'FeatureCollection', 'features': []}
             data['statistics'] = statistics
@@ -139,9 +147,13 @@ def csdi_nearby(state, origin_name, origin_dataset_id='csdi_fitness_rooms',
                 'included. Not emergency response time. Unreachable/over-budget targets are reported separately.')
         if result['ok']:
             data = result['data']
-            data['analysis'].update(sources=sources, origin_dataset_id=origin_dataset_id, origin_name=row.NAME)
+            data['analysis'].update(sources=sources, origin_dataset_id=origin_dataset_id, origin_name=row.NAME,
+                                    exclude_origin=exclude_origin, excluded_origin_count=excluded_count)
+            data['summary']['excluded_origin_count'] = excluded_count
+            result['message'] += f' Origin exclusion: {exclude_origin}; {excluded_count} origin record(s) excluded.'
             for layer in data.get('visualization_layers', []):
                 layer['analysis']['sources'] = sources
+                layer['analysis'].update(exclude_origin=exclude_origin, excluded_origin_count=excluded_count)
             data['temporary_datasets'] = public_datasets(state)
             state['last_analysis'] = data
         return result

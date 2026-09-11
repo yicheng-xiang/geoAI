@@ -37,13 +37,14 @@ export default function CsdiPanel({ sessionId, revision, busy, onBusy, onPrompt 
     finally { onBusy(false); }
   };
   const hasQuery = query.trim().length > 0;
-  const filtered = hasQuery ? catalog.filter((item) => query.trim().toLowerCase().split(/\s+/).every(
-    (term) => `${item.title} ${item.keywords}`.toLowerCase().includes(term))) : [];
+  // The server owns multilingual aliases and catalogue ranking. A second raw
+  // substring filter here would discard valid translated matches (消防站).
+  const filtered = hasQuery ? catalog : [];
   return <section className="upload-box csdi-panel" aria-label="CSDI temporary datasets">
     <h2 className="section-title">CSDI temporary datasets</h2>
     <p className="upload-help">Discover official CSDI datasets. Compatible point WFS sources can be downloaded into this session.</p>
     <input aria-label="Search official CSDI datasets" placeholder="Search: badminton / swimming / 羽毛球" value={query}
-      onChange={(event) => setQuery(event.target.value)} />
+      onChange={(event) => { setQuery(event.target.value); setCatalog([]); setSearching(true); }} />
     {hasQuery && searching && <p role="status">Searching the official catalogue...</p>}
     {hasQuery && !searching && filtered.length === 0 && <p>No matching catalogue entries to display. Check the search status below.</p>}
     {filtered.map((item) => {
@@ -51,7 +52,8 @@ export default function CsdiPanel({ sessionId, revision, busy, onBusy, onPrompt 
       return <div key={item.id} className="csdi-source">
         <strong>{item.title}</strong>
         {item.catalog_stale && <small>Cached catalogue · Live refresh unavailable. Download still validates the WFS service.</small>}
-        {item.discovered && <small>Discovered source · WFS not yet validated</small>}
+        {saved ? <small>WFS validated · Session snapshot available</small>
+          : item.discovered && <small>Discovered source · WFS not yet validated</small>}
         {saved && <small>{saved.row_count} records · WGS 84<br />Downloaded: {new Date(saved.downloaded_at).toLocaleString()}</small>}
         <div className="csdi-actions">
           <button disabled={busy} onClick={() => download(item.id, !!saved)}>{saved ? 'Refresh snapshot' : 'Download'}</button>

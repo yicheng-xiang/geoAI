@@ -8,14 +8,18 @@ NETWORK_PATH = Path(__file__).resolve().parents[3] / '.geoai-runtime' / 'network
 NETWORK_LOCK = threading.Lock()
 
 
-def load_network():
-    if not NETWORK_PATH.is_file():
-        raise ValueError('Road network is not prepared. Run python prepare_road_network.py in back_end first.')
+def load_network(mode='drive'):
+    if mode not in ('drive', 'walk'):
+        raise ValueError('Network mode must be walk or drive.')
+    path = NETWORK_PATH if mode == 'drive' else NETWORK_PATH.with_name('hong_kong_walk.graphml')
+    if not path.is_file():
+        raise ValueError(f'{mode} network is not prepared. Run python prepare_road_network.py --mode {mode}. Existing map is unchanged.')
     with NETWORK_LOCK:
-        return _load(str(NETWORK_PATH), NETWORK_PATH.stat().st_mtime_ns)
+        graph, metadata = _load(str(path), path.stat().st_mtime_ns)
+        return graph, {**metadata, 'network_id': f'hong_kong_{mode}', 'network_type': mode}
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=2)
 def _load(path, version):
     import osmnx as ox
     graph = ox.load_graphml(path)

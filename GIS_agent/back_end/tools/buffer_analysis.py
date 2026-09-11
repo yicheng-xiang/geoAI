@@ -68,6 +68,7 @@ def buffer_facility_coverage(
     location_name=None,
     location_query=None,
     replace_existing=True,
+    exclude_feature_ids=None,
 ):
     """Count registered facilities covered by a metric buffer around a WGS84 point."""
     geocoding = None
@@ -156,6 +157,9 @@ def buffer_facility_coverage(
     )
     if filter_error:
         return tool_error(*filter_error, data={"quality": point_quality})
+
+    if exclude_feature_ids and 'source_feature_id' in filtered:
+        filtered = filtered.loc[~filtered.source_feature_id.isin(exclude_feature_ids)].copy()
 
     points_wgs84 = gpd.GeoDataFrame(
         filtered.copy(),
@@ -306,7 +310,8 @@ def buffer_facility_coverage(
             "analysis": {
                 **shared_analysis,
                 "visual_role": "matched_facilities",
-                "category_colors": {name: "#d97772" for name in unique_types},
+                "category_colors": {name: ["#d97772", "#4c86b5", "#54a088", "#9672b4"][i % 4]
+                                    for i, name in enumerate(sorted(unique_types))},
                 "point_style": {
                     "symbol": "school" if any("school" in name.lower() for name in unique_types) else "facility",
                     "radius_px": 5.0,

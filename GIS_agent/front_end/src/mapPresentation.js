@@ -87,6 +87,7 @@ function numericColor(index, count) {
 }
 
 function legendTitle(analysis = {}, kind = 'polygon') {
+  if (analysis.method === 'network_distance') return analysis.visual_role === 'buffer_center' ? 'Analysis center' : 'Facilities in range';
   if (analysis.method === 'network_service_area') return kind === 'point'
     ? (analysis.visual_role === 'network_targets' ? 'Facilities in range' : 'Analysis origins') : 'Estimated driving coverage';
   if (analysis.method === 'buffer_coverage') {
@@ -180,6 +181,13 @@ export function createLayerPresentation(layer) {
   const features = layer.geojson?.features || [];
   const analysis = layer.analysis || {};
   if (layer.kind === 'line') {
+    if (analysis.visual_role === 'shortest_routes') {
+      const categories = [...new Set(features.map(f => pointCategory(f.properties)))];
+      return { ...layer, pointStyle: null,
+        style: (feature) => ({ color: configuredCategoryColor(analysis, pointCategory(feature.properties)), weight: 2.5, opacity: .8, fill: false }),
+        legend: { title: 'Shortest routes', subtitle: `${features.length} routes · Access connectors included`,
+          entries: categories.map(category => ({color: configuredCategoryColor(analysis, category), label: category, shape: 'line'})), overflowCount: 0 } };
+    }
     return { ...layer, pointStyle: null,
       style: () => ({ color: '#287e9c', weight: 1.5, opacity: 0.8, fill: false }),
       legend: { title: 'Reachable roads', subtitle: 'Directed network travel',
@@ -404,6 +412,10 @@ export function resolveMapHeading(presentation = {}, layers = []) {
       subtitle: `${matched} matched facilit${Number(analysis.matched_count) === 1 ? 'y' : 'ies'}`,
     };
   }
+  if (analysis.method === 'network_distance') return {
+    title: `${label} within ${analysis.distance_m} m ${analysis.travel_mode === 'walk' ? 'walking' : 'driving'} distance of ${analysis.location_name}`,
+    subtitle: `${analysis.matched_count} matched · Road distance + access connectors · Not a circular buffer`,
+  };
   if (analysis.method === 'network_service_area') {
     if (analysis.matched_facilities !== undefined) return {
       title: `${analysis.target_category} within ${analysis.time_minutes} min of ${analysis.facility_name}`,

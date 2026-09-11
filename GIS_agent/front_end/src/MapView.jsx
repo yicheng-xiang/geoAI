@@ -7,6 +7,8 @@ import Basemap from './Basemap.jsx';
 import { bindRoadInteraction } from './roadInteraction.js';
 import { framingOptions, HONG_KONG_BOUNDS } from './mapFraming.js';
 import { exportLeafletMap, getScaleBarDetails } from './mapExport.js';
+import ResultMapSelection from './ResultMapSelection.jsx';
+import { registerResultFeature } from './resultFeatureRegistry.js';
 import { resolveBasemapStyle } from './basemapStyle.js';
 import {
   createLayerPresentation,
@@ -290,6 +292,7 @@ function popupContent(properties = {}, analysis = {}) {
   container.appendChild(heading);
 
   const preferredFields = [
+    ['network_distance_m', 'Road distance including access (m)'],
     ['snap_distance_m', 'Road snap distance (m)'],
     ['status', 'Network match status'],
     ['radius_m', 'Buffer radius (m)'],
@@ -315,7 +318,14 @@ function popupContent(properties = {}, analysis = {}) {
     const formatted = typeof value === 'number'
       ? value.toLocaleString(undefined, { maximumFractionDigits: 3 })
       : value;
-    row.textContent = `${label}: ${formatted}`;
+    row.className = 'feature-popup-row';
+    const fieldLabel = document.createElement('span');
+    fieldLabel.className = 'feature-popup-label';
+    fieldLabel.textContent = label;
+    const fieldValue = document.createElement('span');
+    fieldValue.className = 'feature-popup-value';
+    fieldValue.textContent = formatted;
+    row.append(fieldLabel, fieldValue);
     container.appendChild(row);
     shown.add(label);
   });
@@ -369,7 +379,7 @@ function createPointIcon(symbol, pointStyle) {
   });
 }
 
-function InteractiveLayer({ layer, resultVersion }) {
+function InteractiveLayer({ layer, resultVersion, registry, onFeatureClick }) {
   const map = useMap();
   const geoJsonLayerRef = useRef(null);
 
@@ -398,12 +408,19 @@ function InteractiveLayer({ layer, resultVersion }) {
 
   const onEachFeature = (feature, leafletLayer) => {
     const properties = feature.properties || {};
+    if (properties._result_row_id) {
+      registerResultFeature(registry, feature, leafletLayer);
+      leafletLayer.on('click', () => onFeatureClick?.(properties));
+    }
     const isBufferArea = layer.analysis?.visual_role === 'buffer_area';
     const displayName = getDisplayName(properties);
     if (!isBufferArea) {
       leafletLayer.bindTooltip(displayName, { sticky: true, direction: 'top' });
     }
-    leafletLayer.bindPopup(popupContent(properties, layer.analysis));
+    leafletLayer.bindPopup(popupContent(properties, layer.analysis), {
+      className: 'geoai-feature-popup', maxWidth: 300, minWidth: 190,
+      autoPanPadding: [24, 24],
+    });
     if (layer.kind === 'line') {
       bindRoadInteraction(leafletLayer, layer.style(feature));
       return;
@@ -583,7 +600,10 @@ const MapView = forwardRef(function MapView({
   analysis,
   mapPresentation = {},
   resultVersion,
+  selection,
+  onFeatureClick,
 }, ref) {
+  const featureRegistry = useRef(new Map());
   const [map, setMap] = useState(null);
   const [basemap, setBasemap] = useState(null);
   const [viewportMetadata, setViewportMetadata] = useState(null);
@@ -662,10 +682,11 @@ const MapView = forwardRef(function MapView({
           onChange={setViewportMetadata}
         />
         {presentedLayers.map((layer) => (
-          <InteractiveLayer key={layer.id} layer={layer} resultVersion={resultVersion} />
+          <InteractiveLayer key={layer.instance_id || layer.id} layer={layer} resultVersion={resultVersion} registry={featureRegistry} onFeatureClick={onFeatureClick} />
         ))}
         <DistrictLabels layer={districtLabelLayer} resultVersion={resultVersion} />
         <FitLayers layers={presentedLayers} resultVersion={resultVersion} />
+        <ResultMapSelection selection={selection} registry={featureRegistry} revision={resultVersion} createPointIcon={createPointIcon} />
       </MapContainer>
       <header className="map-title-card">
         <strong>{heading.title}</strong>

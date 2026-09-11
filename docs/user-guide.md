@@ -135,12 +135,27 @@ cd D:\geoAI\GIS_agent\back_end
 
 驾驶分析支持 0–30 分钟（不含 0）、1–100 km/h、最多 200 个起点；默认 30 km/h，接入超过 100 m 的设施排除。输出有向可达道路及两侧各 30 m 的近似走廊，**不是实时交通或救护响应时间**。跨数据集查询使用从选定起点到目标的有向最短时间，不用覆盖面包含关系代替；反向“救护站到健身室”尚未实现。
 
+### 按步行或驾车距离查询
+
+- `Find primary schools within 500 metres walking distance of Hong Kong Polytechnic University Block Z. Replace the current map.`
+- `Find primary schools within 2 km driving distance of Hong Kong Polytechnic University Block Z.`
+
+`network_distance_query` 通过官方地名接口解析起点，以 EPSG:2326 道路几何长度求有向最短距离，步行和驾车使用各自独立路网，不用驾驶分钟替代米数。首次准备步行路网运行 `python prepare_road_network.py --mode walk`；驾车仍为 `--mode drive`，不会覆盖另一种缓存。
+
+阈值包含起点及设施到道路的直线接入距离，单端超过100米排除。这些接入线不代表已核实的入口或可通行路径；不处理实时封路、完整转向限制或校园开放时间。表格记录候选设施的路网距离及超限/不可达状态；地图显示匹配设施、起点及到匹配设施的最短道路路线（包含接入段），不用圆形缓冲冒充路网覆盖面。路线和点位按设施类型配色，提供独立路线图例。补轨迹或修复图例会整体更新当前范围结果，避免残留先前误加的全港设施层；失败保留旧图。
+
 ### 会话与当前限制
+
+CSDI 搜索支持“消防站 / 消防局 / Fire Stations”和“图书馆 / library / libraries”，并处理常用设施英文单复数。医院、小学的 `Facility_Name` 名称字段也可导入；这不代表所有官方数据格式都已兼容。
+
+同一官方数据源内的 `csdi_nearby` 查询默认排除起点自身（`exclude_origin=true`），缓冲区和驾驶模式一致；不会排除同坐标的其他要素。需要包含自身时可明确请求，例如：`Find fire stations within 500 m of Aberdeen Fire Station, including the origin itself.` 结果参数会记录是否排除以及排除数量，原始快照不变。
 
 - 消息、地图、Excel 与 CSDI 快照按会话保存在单个后端进程内。Clear session 清除对应会话，重启后端清除所有临时数据。
 - 普通落区工具的 Agent Schema 仅支持本地库和 Excel；不要将任意 CSDI 落区统计当作已完成能力。
 - 暂不支持人口覆盖、公平性评价、最近设施路径、实时交通或任意格式数据导入。
 - 底图、WFS、地名解析依赖外网；简洁矢量底图失败时保留提示，可单独重试或点击 `Use detailed OSM basemap`。不会在启动或切换预览时自动显示完整 OSM 底图。
 - PNG 复用交互地图已排版的标题、图例、符号和地图整饰；不包含缩放按钮、临时提示和弹窗。请先等待底图加载完成，再导出。
-- 完整统计/质量报告的前端表格联动、生产认证、限流与持久会话仍待完善。
+- 结果表格默认收起，点击 `Show table` 或从 `Result list` 选择结果后查看。展开或拖动表格不会压缩地图，而是在地图下方滚动展示；不使用表格也可正常生成、预览和导出地图。
+- 表格的地图坐标标为 `(map)`，相同的来源坐标不重复列出；存在差异的来源坐标保留并标明字段名。选择高亮不包含在 PNG 中。
+- 完整质量报告展示、生产认证、限流与持久会话仍待完善。
 - 工具失败会终止当前执行链；仅 AI 最后总结失败时，可返回已完成的 GIS 结果并附明确警告。

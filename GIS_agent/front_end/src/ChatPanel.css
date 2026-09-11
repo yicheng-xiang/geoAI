@@ -1,0 +1,27 @@
+.chat-panel { display: flex; flex-direction: column; min-height: 400px; flex: 1 0 400px; border: 1px solid #dce3eb; border-radius: 14px; background: #fff; overflow: hidden; }
+.chat-heading { display: flex; align-items: center; justify-content: space-between; padding: 14px; border-bottom: 1px solid #edf2f7; }
+.chat-heading span { color: #64748b; font-size: 11px; }
+.chat-messages { flex: 1; min-height: 180px; overflow: auto; padding: 14px; overscroll-behavior: contain; }
+.chat-welcome { color: #334155; font-size: 14px; line-height: 1.6; padding: 12px 0; }
+.chat-example { color: #64748b; font-size: 12px; }
+.chat-message { font-size: 13px; line-height: 1.65; margin: 12px 0; padding: 10px 12px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-message.is-user { background: #edf4ff; margin-left: 25px; border-bottom-right-radius: 3px; }
+.chat-message.is-assistant { padding-left: 0; }
+.chat-message.is-error { background: #fff1f2; color: #9f1239; }
+.chat-author { display: block; font-size: 10px; font-weight: 650; color: #64748b; margin-bottom: 4px; }
+.chat-activity { color: #64748b; font-size: 11px; margin: 8px 0; }
+.chat-activity summary { cursor: pointer; padding: 5px 0; }
+.chat-activity pre { font: 11px/1.6 monospace; white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px; background: #f8fafc; }
+.chat-working { color: #0369a1; font-size: 12px; }
+.chat-composer { padding: 12px; border-top: 1px solid #e2e8f0; background: #f8fafc; flex-shrink: 0; }
+.chat-composer label { display: block; font-size: 11px; font-weight: 600; margin-bottom: 6px; color: #475569; }
+.chat-composer textarea { width: 100%; min-height: 72px; max-height: 150px; resize: vertical; padding: 10px; font-size: 13px; line-height: 1.5; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; }
+.chat-composer textarea:focus { outline: 2px solid #bfdbfe; border-color: #60a5fa; }
+.chat-actions { display: flex; justify-content: space-between; gap: 8px; margin: 8px 0; }
+.chat-actions button { border: 1px solid #cbd5e1; background: #fff; color: #475569; border-radius: 8px; padding: 7px 12px; font-size: 12px; cursor: pointer; }
+.chat-actions .chat-send { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.chat-composer small { font-size: 10px; color: #64748b; }
+.data-drawer { flex-shrink: 0; }
+.data-drawer > summary { cursor: pointer; padding: 12px 4px; font-size: 13px; font-weight: 600; color: #475569; }
+.data-drawer .upload-box { margin-top: 10px; }
+@media (max-width: 850px) { .chat-panel { flex: none; height: 560px; max-height: 85dvh; } }

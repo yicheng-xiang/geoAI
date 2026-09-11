@@ -41,6 +41,8 @@ export async function captureMapOverlays(root, mapRect) {
   ];
   for (const selector of selectors) {
     for (const element of root.querySelectorAll(selector)) {
+      // Selection reuses the normal marker template but is never map output.
+      if (element.closest('.leaflet-result-selection-pane')) continue;
       const rect = element.getBoundingClientRect();
       if (!rect.width || !rect.height || getComputedStyle(element).visibility === 'hidden') continue;
       const clone = styledClone(element);
